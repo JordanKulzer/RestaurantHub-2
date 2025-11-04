@@ -13,6 +13,16 @@ export default function RestaurantDetailModal({
     if (url) Linking.openURL(url);
   };
 
+  const categoryList =
+    restaurant.types
+      ?.filter(
+        (t: string) =>
+          !["establishment", "point_of_interest", "food"].includes(t)
+      )
+      // .slice(0, 2)
+      .map((t: string) => t.replace(/_/g, " "))
+      .join(", ") || null;
+
   return (
     <Portal>
       <Modal visible={visible} onDismiss={onDismiss}>
@@ -21,13 +31,18 @@ export default function RestaurantDetailModal({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* 🏷️ Title & Address */}
             <Text style={styles.title}>{restaurant.name}</Text>
             <Text style={styles.subtitle}>
               ⭐ {restaurant.rating || "N/A"} • {restaurant.address}
             </Text>
-
-            {/* 🖼️ Photos */}
+            {restaurant.distance !== undefined && (
+              <Text style={styles.distanceText}>
+                📍 {restaurant.distance.toFixed(1)} mi away
+              </Text>
+            )}
+            {categoryList && (
+              <Text style={styles.category}>🍽️ {categoryList}</Text>
+            )}
             {restaurant.photos?.length > 0 && (
               <ScrollView
                 horizontal
@@ -153,5 +168,18 @@ const styles = StyleSheet.create({
   },
   linkButton: {
     borderRadius: 12,
+  },
+  distanceText: {
+    fontSize: 14,
+    color: "#5e60ce",
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  category: {
+    fontSize: 14,
+    color: "#777",
+    textAlign: "center",
+    marginBottom: 12,
+    textTransform: "capitalize",
   },
 });

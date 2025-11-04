@@ -3,19 +3,21 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialIcons } from "@expo/vector-icons";
 import type { BottomTabNavigationOptions } from "@react-navigation/bottom-tabs";
 import type { RouteProp } from "@react-navigation/native";
+import {
+  HomeScreen,
+  ShuffleScreen,
+  ProfileScreen,
+  FavoritesScreen,
+} from "../screens";
 
-import HomeScreen from "../screens/HomeScreen";
-import ShuffleScreen from "../screens/ShuffleScreen";
-import ProfileScreen from "../screens/ProfileScreen";
-
-// 👇 Define your tab param list
 export type TabParamList = {
   Home: undefined;
   Shuffle: undefined;
   Profile: undefined;
+  Favorites: undefined;
 };
 
-const Tab = createBottomTabNavigator<TabParamList>();
+const Tab = createBottomTabNavigator();
 
 export default function AppNavigator() {
   return (
@@ -35,6 +37,7 @@ export default function AppNavigator() {
           let icon: keyof typeof MaterialIcons.glyphMap = "restaurant-menu";
           if (route.name === "Shuffle") icon = "shuffle";
           if (route.name === "Profile") icon = "person";
+          if (route.name === "Favorites") icon = "favorite";
           return <MaterialIcons name={icon} size={size} color={color} />;
         },
       })}
@@ -48,6 +51,11 @@ export default function AppNavigator() {
         name="Shuffle"
         component={ShuffleScreen}
         options={{ title: "Shuffler" }}
+      />
+      <Tab.Screen
+        name="Favorites"
+        component={FavoritesScreen}
+        options={{ title: "My Favs" }}
       />
       <Tab.Screen
         name="Profile"

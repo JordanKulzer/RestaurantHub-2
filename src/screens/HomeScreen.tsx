@@ -13,7 +13,7 @@ import {
   fetchRestaurantDetails,
 } from "../utils/placesApi";
 import HomeSkeleton from "../components/HomeSkeleton";
-import { RestaurantDetailModal } from "../components";
+import { RestaurantDetailModal, RestaurantOptionsMenu } from "../components";
 import { useScrollToTop } from "@react-navigation/native";
 
 interface Restaurant {
@@ -22,6 +22,7 @@ interface Restaurant {
   rating: number;
   address: string;
   photo?: string | null;
+  distance?: number;
 }
 
 export default function HomeScreen() {
@@ -36,6 +37,12 @@ export default function HomeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [selectedRestaurant, setSelectedRestaurant] = useState<any>(null);
+  const [lists, setLists] = useState<
+    { id: string; name: string; photoUri?: string | null }[]
+  >([]);
+  const [showAddToList, setShowAddToList] = useState(false);
+  const [showCreateList, setShowCreateList] = useState(false);
+  const [restaurantToAdd, setRestaurantToAdd] = useState<any>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<FlatList>(null);
 
@@ -103,37 +110,77 @@ export default function HomeScreen() {
     }
   }, [nextPageToken, loadingMore]);
 
-  const handleAddFavorite = (r: Restaurant) => {
-    if (!favorites.some((f) => f.id === r.id)) {
-      setFavorites([...favorites, r]);
-    }
+  const handleToggleFavorite = (r: Restaurant) => {
+    setFavorites((prev) => {
+      const exists = prev.some((f) => f.id === r.id);
+      if (exists) {
+        return prev.filter((f) => f.id !== r.id);
+      } else {
+        return [...prev, r];
+      }
+    });
   };
 
-  const renderRestaurant = ({ item }: { item: Restaurant }) => (
-    <Card key={item.id} style={styles.smallCard}>
-      <Card.Title
-        title={item.name}
-        subtitle={`${item.address} • ⭐${item.rating}`}
-      />
-      {item.photo && <Card.Cover source={{ uri: item.photo }} />}
-      <Card.Actions>
-        <Button onPress={() => handleAddFavorite(item)}>
-          Add to Favorites
-        </Button>
-        <Button
-          onPress={async () => {
-            const details = await fetchRestaurantDetails(item.id);
-            if (details) {
-              setSelectedRestaurant(details);
-              setShowDetails(true);
-            }
-          }}
-        >
-          View Details
-        </Button>
-      </Card.Actions>
-    </Card>
-  );
+  const handleAddToList = (r: any) => {
+    setRestaurantToAdd(r);
+    setShowAddToList(true);
+  };
+
+  const handleCreateList = (list) => {
+    const id = Date.now().toString();
+    setLists([...lists, { id, ...list }]);
+  };
+
+  const handleSelectList = (listId: string) => {
+    const list = lists.find((l) => l.id === listId);
+    if (list && restaurantToAdd) {
+      console.log(`✅ Added ${restaurantToAdd.name} to ${list.name}`);
+    }
+    setShowAddToList(false);
+    setRestaurantToAdd(null);
+  };
+  const renderRestaurant = ({ item }: { item: Restaurant }) => {
+    const isFavorite = favorites.some((f) => f.id === item.id);
+    const distanceLabel = item.distance
+      ? `${item.distance.toFixed(1)} mi away`
+      : `null`;
+
+    return (
+      <Card key={item.id} style={styles.smallCard}>
+        <Card.Title
+          title={item.name}
+          subtitle={`${item.address} • ⭐${item.rating}`}
+          right={() => (
+            <RestaurantOptionsMenu
+              restaurant={item}
+              isFavorite={isFavorite}
+              onToggleFavorite={handleToggleFavorite}
+              onAddToList={handleAddToList}
+            />
+          )}
+        />
+        {item.photo && <Card.Cover source={{ uri: item.photo }} />}
+        {distanceLabel && (
+          <View style={styles.distanceContainer}>
+            <Text style={styles.distanceText}>{distanceLabel}</Text>
+          </View>
+        )}
+        <Card.Actions>
+          <Button
+            onPress={async () => {
+              const details = await fetchRestaurantDetails(item.id);
+              if (details) {
+                setSelectedRestaurant({ ...details, distance: item.distance });
+                setShowDetails(true);
+              }
+            }}
+          >
+            View Details
+          </Button>
+        </Card.Actions>
+      </Card>
+    );
+  };
 
   if (loading && !refreshing) {
     return (
@@ -160,21 +207,41 @@ export default function HomeScreen() {
                   <Card.Title
                     title={restaurantOfDay.name}
                     subtitle={`${restaurantOfDay.address} • ⭐${restaurantOfDay.rating}`}
+                    right={() => {
+                      const isFavorite = favorites.some(
+                        (f) => f.id === restaurantOfDay.id
+                      );
+                      return (
+                        <RestaurantOptionsMenu
+                          restaurant={restaurantOfDay}
+                          isFavorite={isFavorite}
+                          onToggleFavorite={handleToggleFavorite}
+                          onAddToList={handleAddToList}
+                        />
+                      );
+                    }}
                   />
                   {restaurantOfDay.photo && (
                     <Card.Cover source={{ uri: restaurantOfDay.photo }} />
                   )}
+                  {restaurantOfDay.distance !== undefined && (
+                    <View style={styles.distanceContainer}>
+                      <Text style={styles.distanceText}>
+                        {restaurantOfDay.distance.toFixed(1)} mi away
+                      </Text>
+                    </View>
+                  )}
                   <Card.Actions>
-                    <Button onPress={() => handleAddFavorite(restaurantOfDay)}>
-                      Add to Favorites
-                    </Button>
                     <Button
                       onPress={async () => {
                         const details = await fetchRestaurantDetails(
                           restaurantOfDay.id
                         );
                         if (details) {
-                          setSelectedRestaurant(details);
+                          setSelectedRestaurant({
+                            ...details,
+                            distance: restaurantOfDay.distance,
+                          });
                           setShowDetails(true);
                         }
                       }}
@@ -221,6 +288,25 @@ export default function HomeScreen() {
         onDismiss={() => setShowDetails(false)}
         restaurant={selectedRestaurant}
       />
+      {/* <AddToListModal
+        visible={showAddToList}
+        onDismiss={() => setShowAddToList(false)}
+        lists={lists}
+        onSelectList={handleSelectList}
+        onCreateList={handleCreateList}
+      /> */}
+      {/*
+      <CreateListModal
+        visible={showCreateList}
+        onDismiss={() => setShowCreateList(false)}
+        onCreate={(list) => {
+          handleCreateList(list);
+          // optionally auto-add restaurantToAdd here:
+          console.log(`✅ Added ${restaurantToAdd?.name} to new list ${list.name}`);
+          setShowCreateList(false);
+          setRestaurantToAdd(null);
+        }}
+      /> */}
     </>
   );
 }
@@ -232,4 +318,16 @@ const styles = StyleSheet.create({
   card: { marginBottom: 20 },
   smallCard: { marginBottom: 14 },
   footer: { padding: 20, alignItems: "center" },
+  distanceContainer: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#f8f8f8",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#ddd",
+  },
+  distanceText: {
+    fontSize: 14,
+    color: "#555",
+    textAlign: "right",
+  },
 });
