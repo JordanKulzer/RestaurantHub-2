@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, StyleSheet, FlatList } from "react-native";
-import { Button, Card, Text } from "react-native-paper";
+import { Button, Card, Text, Surface, useTheme } from "react-native-paper";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   RestaurantDetailModal,
   DropdownModal,
@@ -14,6 +15,7 @@ import {
 import Toast from "react-native-toast-message";
 
 export default function ShuffleScreen() {
+  const theme = useTheme();
   const [phase, setPhase] = useState<"setup" | "eliminate">("setup");
   const [categories, setCategories] = useState<string[]>([]);
   const [rating, setRating] = useState("");
@@ -25,13 +27,8 @@ export default function ShuffleScreen() {
   const [loading, setLoading] = useState(false);
   const [selectedRestaurant, setSelectedRestaurant] = useState<any>(null);
   const [showDetails, setShowDetails] = useState(false);
-  const [lists, setLists] = useState<
-    { id: string; name: string; photoUri?: string | null }[]
-  >([]);
-  const [showAddToList, setShowAddToList] = useState(false);
   const [restaurantToAdd, setRestaurantToAdd] = useState<any>(null);
-
-  const categoryOptions = CATEGORY_OPTIONS;
+  const [showAddToList, setShowAddToList] = useState(false);
 
   const ratingOptions = [
     { label: "Any", value: "" },
@@ -75,8 +72,7 @@ export default function ShuffleScreen() {
     });
 
     setLoading(false);
-
-    if (!results || results.length === 0) {
+    if (!results?.length) {
       setNoResults(true);
       setRestaurants([]);
       return;
@@ -91,8 +87,18 @@ export default function ShuffleScreen() {
     setRestaurants(remaining);
 
     if (remaining.length === 1) {
-      alert(`🎉 Winner: ${remaining[0].name}!`);
+      Toast.show({
+        type: "success",
+        text1: `🎉 Winner: ${remaining[0].name}!`,
+        position: "bottom",
+      });
     }
+  };
+
+  const handleTryAgain = () => {
+    setRestaurants([]);
+    setPhase("setup");
+    setNoResults(false);
   };
 
   const handleToggleFavorite = (r: any) => {
@@ -107,17 +113,22 @@ export default function ShuffleScreen() {
     setShowAddToList(true);
   };
 
-  const handleTryAgain = () => {
-    setRestaurants([]);
-    setPhase("setup");
-    setNoResults(false);
-  };
-
   return (
-    <>
+    <View style={{ flex: 1 }}>
+      <LinearGradient
+        colors={["#fafaff", "#f4f4ff"]}
+        style={StyleSheet.absoluteFill}
+      />
+
       {phase === "eliminate" ? (
         <View style={styles.container}>
-          <Text style={styles.header}>🔥 Eliminate until one remains!</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.purpleBar} />
+            <Text style={styles.header}>🔥 Elimination Round</Text>
+          </View>
+          <Text style={styles.subtext}>
+            Remove one at a time until you find your winner!
+          </Text>
 
           <FlatList
             data={restaurants}
@@ -183,38 +194,46 @@ export default function ShuffleScreen() {
             onPress={handleTryAgain}
             style={styles.tryAgainButton}
           >
-            Try Again
+            Start Over
           </Button>
         </View>
       ) : (
         <View style={styles.container}>
-          <Text style={styles.header}>🎲 Restaurant Shuffler</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.purpleBar} />
+            <Text style={styles.header}>🎲 Restaurant Shuffler</Text>
+          </View>
+          <Text style={styles.subtext}>
+            Set your filters and let fate choose your next meal.
+          </Text>
 
-          <DropdownModal
-            label="Categories"
-            options={categoryOptions}
-            value={categories}
-            onChange={setCategories}
-            multiSelect
-          />
-          <DropdownModal
-            label="Rating"
-            options={ratingOptions}
-            value={rating}
-            onChange={setRating}
-          />
-          <DropdownModal
-            label="Distance"
-            options={distanceOptions}
-            value={distance}
-            onChange={setDistance}
-          />
-          <DropdownModal
-            label="Number of Restaurants"
-            options={numberOptions}
-            value={numberDisplayed}
-            onChange={setNumberDisplayed}
-          />
+          <Surface style={styles.filterCard}>
+            <DropdownModal
+              label="🍽 Categories"
+              options={CATEGORY_OPTIONS}
+              value={categories}
+              onChange={setCategories}
+              multiSelect
+            />
+            <DropdownModal
+              label="⭐ Rating"
+              options={ratingOptions}
+              value={rating}
+              onChange={setRating}
+            />
+            <DropdownModal
+              label="📍 Distance"
+              options={distanceOptions}
+              value={distance}
+              onChange={setDistance}
+            />
+            <DropdownModal
+              label="🔢 Number of Restaurants"
+              options={numberOptions}
+              value={numberDisplayed}
+              onChange={setNumberDisplayed}
+            />
+          </Surface>
 
           {noResults && (
             <Text style={styles.noResults}>
@@ -224,6 +243,7 @@ export default function ShuffleScreen() {
 
           <Button
             mode="contained"
+            icon="shuffle"
             style={styles.shuffleButton}
             onPress={handleShuffle}
             loading={loading}
@@ -237,7 +257,7 @@ export default function ShuffleScreen() {
             style={styles.tryAgainButton}
             onPress={handleTryAgain}
           >
-            Try Again
+            Reset Filters
           </Button>
         </View>
       )}
@@ -247,37 +267,62 @@ export default function ShuffleScreen() {
         onDismiss={() => setShowDetails(false)}
         restaurant={selectedRestaurant}
       />
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20 },
+  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
+  purpleBar: {
+    width: 5,
+    height: 24,
+    backgroundColor: "#5e60ce",
+    borderRadius: 4,
+    marginRight: 8,
+  },
   header: {
     fontSize: 22,
-    fontWeight: "600",
+    fontWeight: "700",
+    color: "#222",
+  },
+  subtext: { color: "#555", marginBottom: 16 },
+  filterCard: {
+    borderRadius: 16,
+    elevation: 3,
+    backgroundColor: "#fff",
+    padding: 12,
     marginBottom: 20,
-    textAlign: "center",
   },
-  shuffleButton: { marginTop: 40 },
-  tryAgainButton: { marginTop: 16 },
-  card: { marginBottom: 14 },
-  noResults: {
-    textAlign: "center",
-    color: "red",
-    fontSize: 16,
+  card: {
+    marginBottom: 14,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#fff",
+    elevation: 2,
+  },
+  shuffleButton: {
     marginTop: 16,
+    borderRadius: 24,
+    paddingVertical: 6,
   },
+  tryAgainButton: { marginTop: 10 },
   distanceContainer: {
+    backgroundColor: "#f3f3f8",
     paddingVertical: 6,
     paddingHorizontal: 12,
-    backgroundColor: "#f8f8f8",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#ddd",
   },
   distanceText: {
     fontSize: 14,
-    color: "#555",
+    color: "#5e60ce",
     textAlign: "right",
+  },
+  noResults: {
+    textAlign: "center",
+    color: "red",
+    fontSize: 15,
+    marginTop: 16,
   },
 });

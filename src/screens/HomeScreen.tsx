@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useLayoutEffect,
+} from "react";
 import {
   View,
   StyleSheet,
@@ -7,14 +13,14 @@ import {
   Text,
   Animated,
 } from "react-native";
-import { Card, Button } from "react-native-paper";
+import { Card, Button, IconButton } from "react-native-paper";
 import {
   fetchNearbyRestaurants,
   fetchRestaurantDetails,
 } from "../utils/placesApi";
 import HomeSkeleton from "../components/HomeSkeleton";
 import { RestaurantDetailModal, RestaurantOptionsMenu } from "../components";
-import { useScrollToTop } from "@react-navigation/native";
+import { useNavigation, useScrollToTop } from "@react-navigation/native";
 
 interface Restaurant {
   id: string;
@@ -26,6 +32,7 @@ interface Restaurant {
 }
 
 export default function HomeScreen() {
+  const navigation = useNavigation();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [favorites, setFavorites] = useState<Restaurant[]>([]);
   const [restaurantOfDay, setRestaurantOfDay] = useState<Restaurant | null>(
@@ -37,11 +44,7 @@ export default function HomeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [selectedRestaurant, setSelectedRestaurant] = useState<any>(null);
-  const [lists, setLists] = useState<
-    { id: string; name: string; photoUri?: string | null }[]
-  >([]);
   const [showAddToList, setShowAddToList] = useState(false);
-  const [showCreateList, setShowCreateList] = useState(false);
   const [restaurantToAdd, setRestaurantToAdd] = useState<any>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<FlatList>(null);
@@ -50,17 +53,31 @@ export default function HomeScreen() {
     loadInitialRestaurants();
   }, []);
 
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <IconButton
+          icon="magnify"
+          onPress={() => {
+            const parentNav = navigation.getParent();
+            parentNav?.navigate("Search");
+          }}
+          accessibilityLabel="Search restaurants"
+        />
+      ),
+    });
+  }, [navigation]);
+
   useScrollToTop(flatListRef);
 
   const loadInitialRestaurants = async (isRefresh = false) => {
     try {
       if (!isRefresh) setLoading(true);
       const { results, nextToken } = await fetchNearbyRestaurants({});
-      const shuffled = [...results].sort(() => Math.random() - 0.5); // new list each refresh
+      const shuffled = [...results].sort(() => Math.random() - 0.5);
       setRestaurants(shuffled);
       setNextPageToken(nextToken);
 
-      // Deterministic Restaurant of the Day (same for everyone)
       const today = new Date().toISOString().split("T")[0];
       const index =
         Math.abs(today.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0)) %
@@ -77,7 +94,6 @@ export default function HomeScreen() {
   const handleRefresh = async () => {
     setRefreshing(true);
 
-    // fade out current content
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: 250,
@@ -86,7 +102,6 @@ export default function HomeScreen() {
 
     await loadInitialRestaurants(true);
 
-    // fade in new content
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 300,
@@ -126,19 +141,19 @@ export default function HomeScreen() {
     setShowAddToList(true);
   };
 
-  const handleCreateList = (list) => {
-    const id = Date.now().toString();
-    setLists([...lists, { id, ...list }]);
-  };
+  // const handleCreateList = (list) => {
+  //   const id = Date.now().toString();
+  //   setLists([...lists, { id, ...list }]);
+  // };
 
-  const handleSelectList = (listId: string) => {
-    const list = lists.find((l) => l.id === listId);
-    if (list && restaurantToAdd) {
-      console.log(`✅ Added ${restaurantToAdd.name} to ${list.name}`);
-    }
-    setShowAddToList(false);
-    setRestaurantToAdd(null);
-  };
+  // const handleSelectList = (listId: string) => {
+  //   const list = lists.find((l) => l.id === listId);
+  //   if (list && restaurantToAdd) {
+  //     console.log(`✅ Added ${restaurantToAdd.name} to ${list.name}`);
+  //   }
+  //   setShowAddToList(false);
+  //   setRestaurantToAdd(null);
+  // };
   const renderRestaurant = ({ item }: { item: Restaurant }) => {
     const isFavorite = favorites.some((f) => f.id === item.id);
     const distanceLabel = item.distance
@@ -201,7 +216,24 @@ export default function HomeScreen() {
           renderItem={renderRestaurant}
           ListHeaderComponent={
             <>
-              <Text style={styles.header}>🍽️ Restaurant of the Day</Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginBottom: 6,
+                }}
+              >
+                <View
+                  style={{
+                    width: 5,
+                    height: 24,
+                    backgroundColor: "#5e60ce",
+                    borderRadius: 4,
+                    marginRight: 8,
+                  }}
+                />
+                <Text style={styles.header}>Restaurant of the Day</Text>
+              </View>
               {restaurantOfDay && (
                 <Card style={styles.card}>
                   <Card.Title
@@ -251,7 +283,6 @@ export default function HomeScreen() {
                   </Card.Actions>
                 </Card>
               )}
-
               {favorites.length > 0 && (
                 <>
                   <Text style={styles.header}>❤️ Your Favorites</Text>
@@ -265,8 +296,24 @@ export default function HomeScreen() {
                   ))}
                 </>
               )}
-
-              <Text style={styles.header}>🎯 Random Picks Near You</Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginBottom: 6,
+                }}
+              >
+                <View
+                  style={{
+                    width: 5,
+                    height: 24,
+                    backgroundColor: "#5e60ce",
+                    borderRadius: 4,
+                    marginRight: 8,
+                  }}
+                />
+                <Text style={styles.header}>Random Picks Near You</Text>
+              </View>
             </>
           }
           onEndReachedThreshold={0.5}
@@ -314,20 +361,32 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { padding: 16 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: { fontSize: 22, fontWeight: "600", marginVertical: 16 },
-  card: { marginBottom: 20 },
+  header: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginVertical: 16,
+    color: "#222",
+    alignSelf: "flex-start",
+  },
+  card: {
+    marginBottom: 20,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: "#fff",
+    elevation: 4,
+  },
   smallCard: { marginBottom: 14 },
   footer: { padding: 20, alignItems: "center" },
   distanceContainer: {
+    backgroundColor: "#f3f3f8",
     paddingVertical: 6,
     paddingHorizontal: 12,
-    backgroundColor: "#f8f8f8",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#ddd",
   },
   distanceText: {
     fontSize: 14,
-    color: "#555",
+    color: "#5e60ce",
     textAlign: "right",
   },
 });

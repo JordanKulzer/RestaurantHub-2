@@ -223,3 +223,66 @@ export async function fetchRestaurantDetails(placeId: string) {
     hours: r.opening_hours?.weekday_text || [],
   };
 }
+
+/**
+ * Text-based search (search by name or category)
+ */
+export async function fetchTextSearch(query: string) {
+  const { status } = await Location.requestForegroundPermissionsAsync();
+  if (status !== "granted") throw new Error("Location permission not granted");
+
+  const { coords } = await Location.getCurrentPositionAsync({});
+  const { latitude, longitude } = coords;
+
+  const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+    query
+  )}&location=${latitude},${longitude}&radius=10000&key=${API_KEY}`;
+
+  const res = await fetch(url);
+  const data = await res.json();
+
+  return (
+    data.results?.map((r: any) => ({
+      id: r.place_id,
+      name: r.name,
+      rating: r.rating,
+      address: r.formatted_address || r.vicinity,
+      photo:
+        r.photos?.length > 0
+          ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
+          : null,
+    })) ?? []
+  );
+}
+
+/*
+ * Fetch autocomplete suggestions for a query
+ */
+export async function fetchAutocomplete(query: string) {
+  console.log("🔍 fetching autocomplete for:", query);
+
+  const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
+    query
+  )}&types=establishment&components=country:us&key=${API_KEY}`;
+
+  console.log("➡️ URL:", url);
+
+  try {
+    const res = await fetch(url);
+    const json = await res.json();
+    console.log("📦 autocomplete response:", json);
+
+    if (!json.predictions || json.predictions.length === 0) {
+      console.warn("⚠️ no predictions returned");
+      return [];
+    }
+
+    return json.predictions.map((p: any) => ({
+      id: p.place_id,
+      name: p.description,
+    }));
+  } catch (err) {
+    console.error("❌ autocomplete fetch failed:", err);
+    return [];
+  }
+}

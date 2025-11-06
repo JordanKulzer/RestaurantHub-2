@@ -1,5 +1,6 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { MaterialIcons } from "@expo/vector-icons";
 import type { BottomTabNavigationOptions } from "@react-navigation/bottom-tabs";
 import type { RouteProp } from "@react-navigation/native";
@@ -8,6 +9,7 @@ import {
   ShuffleScreen,
   ProfileScreen,
   FavoritesScreen,
+  SearchScreen,
 } from "../screens";
 
 export type TabParamList = {
@@ -18,8 +20,9 @@ export type TabParamList = {
 };
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
-export default function AppNavigator() {
+function TabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({
@@ -63,5 +66,26 @@ export default function AppNavigator() {
         options={{ title: "Profile" }}
       />
     </Tab.Navigator>
+  );
+}
+
+export default function AppNavigator() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="RootTabs"
+        component={TabNavigator}
+        options={{ headerShown: false }}
+      />
+
+      <Stack.Screen
+        name="Search"
+        component={SearchScreen}
+        options={{
+          headerShown: false,
+          presentation: "card",
+        }}
+      />
+    </Stack.Navigator>
   );
 }
