@@ -30,6 +30,7 @@ export default function RestaurantDetailModal({
   const theme = useTheme();
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  console.log("Rendering", "RestaurantDetailModal");
 
   useEffect(() => {
     if (visible) {

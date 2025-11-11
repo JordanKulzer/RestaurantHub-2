@@ -10,7 +10,6 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["react", "react-native"]
   },
   "include": ["src", "App.tsx", "declarations.d.ts"]
 }

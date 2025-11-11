@@ -1,4 +1,5 @@
 import React from "react";
+import { StyleSheet } from "react-native"; // ✅ add this
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -11,11 +12,13 @@ import {
   FavoritesScreen,
   SearchScreen,
 } from "../screens";
+import { useTheme } from "react-native-paper";
 
 export type TabParamList = {
   Home: undefined;
   Shuffle: undefined;
   Profile: undefined;
+  Search: undefined;
   Favorites: undefined;
 };
 
@@ -23,6 +26,8 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 function TabNavigator() {
+  const theme = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={({
@@ -32,14 +37,23 @@ function TabNavigator() {
       }): BottomTabNavigationOptions => ({
         headerShown: true,
         headerTitleAlign: "center",
-        tabBarActiveTintColor: "#5e60ce",
-        tabBarInactiveTintColor: "gray",
-        headerStyle: { backgroundColor: "transparent" },
-        tabBarStyle: { backgroundColor: "#fff" },
+        headerStyle: {
+          backgroundColor: theme.colors.surface,
+        },
+        headerTitleStyle: {
+          color: theme.colors.onSurface,
+        },
+        tabBarActiveTintColor: theme.colors.tertiary,
+        tabBarInactiveTintColor: theme.colors.onSurface + "99", // 60% opacity
+        tabBarStyle: {
+          backgroundColor: theme.colors.surface,
+          borderTopColor: theme.colors.outline,
+          borderTopWidth: StyleSheet.hairlineWidth,
+        },
         tabBarIcon: ({ color, size }: { color: string; size: number }) => {
           let icon: keyof typeof MaterialIcons.glyphMap = "restaurant-menu";
           if (route.name === "Shuffle") icon = "shuffle";
-          if (route.name === "Profile") icon = "person";
+          if (route.name === "Search") icon = "search";
           if (route.name === "Favorites") icon = "favorite";
           return <MaterialIcons name={icon} size={size} color={color} />;
         },
@@ -56,14 +70,14 @@ function TabNavigator() {
         options={{ title: "Shuffler" }}
       />
       <Tab.Screen
-        name="Favorites"
-        component={FavoritesScreen}
-        options={{ title: "My Favs" }}
+        name="Search"
+        component={SearchScreen}
+        options={{ title: "Search" }}
       />
       <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ title: "Profile" }}
+        name="Favorites"
+        component={FavoritesScreen}
+        options={{ title: "My Stuff" }}
       />
     </Tab.Navigator>
   );
@@ -77,7 +91,6 @@ export default function AppNavigator() {
         component={TabNavigator}
         options={{ headerShown: false }}
       />
-
       <Stack.Screen
         name="Search"
         component={SearchScreen}

@@ -36,14 +36,12 @@ export default function ShuffleScreen() {
     { label: "4+", value: "4" },
     { label: "4.5+", value: "4.5" },
   ];
-
   const distanceOptions = [
     { label: "1 mi", value: "1" },
     { label: "3 mi", value: "3" },
     { label: "5 mi", value: "5" },
     { label: "10 mi", value: "10" },
   ];
-
   const numberOptions = [
     { label: "3", value: "3" },
     { label: "5", value: "5" },
@@ -54,7 +52,6 @@ export default function ShuffleScreen() {
   const handleShuffle = async () => {
     setLoading(true);
     setNoResults(false);
-
     const results = await fetchShuffledRestaurants({
       distanceMiles: distance ? Number(distance) : 5,
       minRating: rating ? Number(rating) : 0,
@@ -77,7 +74,6 @@ export default function ShuffleScreen() {
       setRestaurants([]);
       return;
     }
-
     setRestaurants(results);
     setPhase("eliminate");
   };
@@ -85,7 +81,6 @@ export default function ShuffleScreen() {
   const handleEliminate = (id: string) => {
     const remaining = restaurants.filter((r) => r.id !== id);
     setRestaurants(remaining);
-
     if (remaining.length === 1) {
       Toast.show({
         type: "success",
@@ -113,20 +108,28 @@ export default function ShuffleScreen() {
     setShowAddToList(true);
   };
 
+  const accent = theme.colors.tertiary; // burnt orange
+  const surface = theme.colors.surface;
+  const textColor = theme.colors.onSurface;
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <LinearGradient
-        colors={["#fafaff", "#f4f4ff"]}
+        colors={[theme.colors.background, surface]}
         style={StyleSheet.absoluteFill}
       />
 
       {phase === "eliminate" ? (
         <View style={styles.container}>
           <View style={styles.headerRow}>
-            <View style={styles.purpleBar} />
-            <Text style={styles.header}>🔥 Elimination Round</Text>
+            <View style={[styles.colorBar, { backgroundColor: accent }]} />
+            <Text style={[styles.header, { color: textColor }]}>
+              🔥 Elimination Round
+            </Text>
           </View>
-          <Text style={styles.subtext}>
+          <Text
+            style={[styles.subtext, { color: theme.colors.onSurface + "BB" }]}
+          >
             Remove one at a time until you find your winner!
           </Text>
 
@@ -141,7 +144,10 @@ export default function ShuffleScreen() {
                   : "";
 
               return (
-                <Card style={styles.card}>
+                <Card
+                  mode="elevated"
+                  style={[styles.card, { backgroundColor: surface }]}
+                >
                   <Card.Title
                     title={item.name}
                     subtitle={`${item.address} • ⭐${item.rating.toFixed(1)}`}
@@ -158,13 +164,15 @@ export default function ShuffleScreen() {
 
                   {distanceLabel && (
                     <View style={styles.distanceContainer}>
-                      <Text style={styles.distanceText}>{distanceLabel}</Text>
+                      <Text style={[styles.distanceText, { color: accent }]}>
+                        {distanceLabel}
+                      </Text>
                     </View>
                   )}
 
                   <Card.Actions>
                     <Button
-                      textColor="red"
+                      textColor={accent}
                       onPress={() => handleEliminate(item.id)}
                     >
                       Eliminate
@@ -192,6 +200,8 @@ export default function ShuffleScreen() {
           <Button
             mode="contained"
             onPress={handleTryAgain}
+            buttonColor={accent}
+            textColor="#fff"
             style={styles.tryAgainButton}
           >
             Start Over
@@ -200,14 +210,23 @@ export default function ShuffleScreen() {
       ) : (
         <View style={styles.container}>
           <View style={styles.headerRow}>
-            <View style={styles.purpleBar} />
-            <Text style={styles.header}>🎲 Restaurant Shuffler</Text>
+            <View style={[styles.colorBar, { backgroundColor: accent }]} />
+            <Text style={[styles.header, { color: textColor }]}>
+              🎲 Restaurant Shuffler
+            </Text>
           </View>
-          <Text style={styles.subtext}>
+          <Text
+            style={[styles.subtext, { color: theme.colors.onSurface + "BB" }]}
+          >
             Set your filters and let fate choose your next meal.
           </Text>
 
-          <Surface style={styles.filterCard}>
+          <Surface
+            style={[
+              styles.filterCard,
+              { backgroundColor: surface, borderColor: accent },
+            ]}
+          >
             <DropdownModal
               label="🍽 Categories"
               options={CATEGORY_OPTIONS}
@@ -236,7 +255,7 @@ export default function ShuffleScreen() {
           </Surface>
 
           {noResults && (
-            <Text style={styles.noResults}>
+            <Text style={[styles.noResults, { color: accent }]}>
               No results found with your filters.
             </Text>
           )}
@@ -244,6 +263,8 @@ export default function ShuffleScreen() {
           <Button
             mode="contained"
             icon="shuffle"
+            buttonColor={accent}
+            textColor="#fff"
             style={styles.shuffleButton}
             onPress={handleShuffle}
             loading={loading}
@@ -256,6 +277,7 @@ export default function ShuffleScreen() {
             mode="outlined"
             style={styles.tryAgainButton}
             onPress={handleTryAgain}
+            textColor={accent}
           >
             Reset Filters
           </Button>
@@ -274,31 +296,25 @@ export default function ShuffleScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20 },
   headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
-  purpleBar: {
+  colorBar: {
     width: 5,
     height: 24,
-    backgroundColor: "#5e60ce",
     borderRadius: 4,
     marginRight: 8,
   },
-  header: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#222",
-  },
-  subtext: { color: "#555", marginBottom: 16 },
+  header: { fontSize: 22, fontWeight: "700" },
+  subtext: { marginBottom: 16 },
   filterCard: {
     borderRadius: 16,
     elevation: 3,
-    backgroundColor: "#fff",
     padding: 12,
     marginBottom: 20,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   card: {
     marginBottom: 14,
     borderRadius: 16,
     overflow: "hidden",
-    backgroundColor: "#fff",
     elevation: 2,
   },
   shuffleButton: {
@@ -314,14 +330,9 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#ddd",
   },
-  distanceText: {
-    fontSize: 14,
-    color: "#5e60ce",
-    textAlign: "right",
-  },
+  distanceText: { fontSize: 14, textAlign: "right" },
   noResults: {
     textAlign: "center",
-    color: "red",
     fontSize: 15,
     marginTop: 16,
   },

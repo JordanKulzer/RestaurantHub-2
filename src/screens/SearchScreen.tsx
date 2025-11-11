@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -6,6 +6,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Animated,
+  Keyboard,
 } from "react-native";
 import {
   Appbar,
@@ -13,15 +15,18 @@ import {
   Card,
   Button,
   useTheme,
-  ActivityIndicator,
+  Text,
+  Chip,
 } from "react-native-paper";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   fetchTextSearch,
   fetchRestaurantDetails,
   fetchAutocomplete,
 } from "../utils/placesApi";
+import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import RestaurantDetailModal from "../components/RestaurantDetailModal";
-import { Keyboard } from "react-native";
+import HomeSkeleton from "../components/HomeSkeleton";
 
 export default function SearchScreen({ navigation }: any) {
   const theme = useTheme();
@@ -32,9 +37,33 @@ export default function SearchScreen({ navigation }: any) {
   const [typingTimeout, setTypingTimeout] = useState<any>(null);
   const [selectedRestaurant, setSelectedRestaurant] = useState<any>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!loading && results.length > 0) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      fadeAnim.setValue(0);
+    }
+  }, [loading, results]);
 
   const handleInputChange = (text: string) => {
     setQuery(text);
+
+    if (text.trim().length === 0) {
+      setResults([]);
+      setSuggestions([]);
+      setSelectedCategory(null);
+      return;
+    }
+
+    setSelectedCategory(null);
     if (typingTimeout) clearTimeout(typingTimeout);
     setTypingTimeout(
       setTimeout(async () => {
@@ -64,6 +93,28 @@ export default function SearchScreen({ navigation }: any) {
     }
   };
 
+  const handleCategorySelect = async (category: string) => {
+    if (selectedCategory === category) {
+      setSelectedCategory(null);
+      setResults([]);
+      setQuery("");
+      return;
+    }
+
+    setSelectedCategory(category);
+    setQuery(category);
+    setSuggestions([]);
+    setLoading(true);
+    try {
+      const data = await fetchTextSearch(category);
+      setResults(data);
+    } catch (err) {
+      console.error("❌ Category search error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openDetails = async (placeId: string) => {
     Keyboard.dismiss();
     try {
@@ -75,68 +126,192 @@ export default function SearchScreen({ navigation }: any) {
     }
   };
 
+  const showEmptyState =
+    !loading &&
+    results.length === 0 &&
+    suggestions.length === 0 &&
+    query.trim().length === 0;
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Appbar.Header mode="small" elevated>
-        <Appbar.BackAction onPress={() => navigation.goBack()} />
-        <Searchbar
-          placeholder="Type or search with your voice"
-          value={query}
-          onChangeText={handleInputChange}
-          onSubmitEditing={() => handleSearch()}
-          style={styles.searchbar}
-          autoFocus
+      <LinearGradient
+        colors={
+          theme.dark
+            ? [theme.colors.background, theme.colors.surface]
+            : [theme.colors.surface, theme.colors.background]
+        }
+        style={StyleSheet.absoluteFill}
+      />
+
+      <Appbar.Header
+        mode="small"
+        elevated
+        statusBarHeight={0}
+        style={[
+          styles.appbar,
+          {
+            backgroundColor: theme.colors.surface,
+            borderBottomColor: theme.colors.outline,
+          },
+        ]}
+      >
+        <Appbar.BackAction
+          onPress={() => navigation.goBack()}
+          color={theme.colors.primary}
         />
-        <Appbar.Action icon="microphone" onPress={() => {}} />
+        <View style={styles.searchbarContainer}>
+          <Searchbar
+            placeholder="Type or search with your voice"
+            value={query}
+            onChangeText={handleInputChange}
+            onSubmitEditing={() => handleSearch()}
+            style={[
+              styles.searchbar,
+              { backgroundColor: theme.colors.background },
+            ]}
+            inputStyle={{ fontSize: 15, color: theme.colors.onSurface }}
+            autoFocus
+            iconColor={theme.colors.primary}
+            placeholderTextColor={theme.colors.onSurface + "88"}
+          />
+        </View>
+        <Appbar.Action
+          icon="microphone"
+          onPress={() => {}}
+          color={theme.colors.primary}
+        />
       </Appbar.Header>
 
-      {suggestions.length > 0 && results.length === 0 && !loading && (
-        <ScrollView
-          style={{ maxHeight: 250, paddingHorizontal: 16 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          {suggestions.map((s) => (
+      {/* Chips row always visible */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipContainer}
+      >
+        {CATEGORY_OPTIONS.map((opt) => {
+          const isSelected = selectedCategory === opt.value;
+          return (
+            <Chip
+              compact
+              key={opt.value}
+              onPress={() => handleCategorySelect(opt.value)}
+              selected={isSelected}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: isSelected
+                    ? theme.colors.secondary
+                    : theme.colors.surface,
+                  borderColor: theme.colors.outline,
+                },
+              ]}
+              textStyle={{
+                color: isSelected
+                  ? theme.colors.onPrimary || "#fff"
+                  : theme.colors.onSurface,
+              }}
+              selectedColor={theme.colors.onPrimary}
+            >
+              {opt.label}
+            </Chip>
+          );
+        })}
+      </ScrollView>
+
+      {/* Main scroll area for suggestions/results/empty */}
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 20 }}
+      >
+        {showEmptyState && (
+          <View style={styles.emptyState}>
+            <Text
+              style={[styles.emptyTitle, { color: theme.colors.onSurface }]}
+            >
+              Find your next favorite spot
+            </Text>
+            <Text
+              style={[
+                styles.emptySubtitle,
+                { color: theme.colors.onSurface + "99" },
+              ]}
+            >
+              Search by cuisine, restaurant name, or vibe.
+            </Text>
+          </View>
+        )}
+
+        {!loading &&
+          suggestions.map((s) => (
             <Button
               key={s.id}
               onPress={() => openDetails(s.id)}
-              style={{ alignItems: "flex-start" }}
+              style={styles.suggestionButton}
+              textColor={theme.colors.primary}
+              contentStyle={{ justifyContent: "flex-start" }}
             >
               {s.name}
             </Button>
           ))}
-        </ScrollView>
-      )}
 
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 20 }} />
-      ) : (
-        <FlatList
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.scrollArea}
-          data={results}
-          keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
-            <Card style={styles.card}>
-              <View style={{ borderRadius: 12, overflow: "hidden" }}>
-                <Card.Title
-                  title={item.name}
-                  subtitle={`${item.address || ""} • ⭐${item.rating || "N/A"}`}
-                />
-                {item.photo && <Card.Cover source={{ uri: item.photo }} />}
-                <Card.Actions>
-                  <Button onPress={() => openDetails(item.id)}>
-                    View Details
-                  </Button>
-                </Card.Actions>
-              </View>
-            </Card>
-          )}
-        />
-      )}
+        {loading && (
+          <View style={{ padding: 16 }}>
+            <HomeSkeleton />
+          </View>
+        )}
+
+        {!loading && results.length > 0 && (
+          <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+            <FlatList
+              data={results}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.scrollArea}
+              renderItem={({ item }) => (
+                <Card
+                  mode="elevated"
+                  style={[
+                    styles.card,
+                    { backgroundColor: theme.colors.surface },
+                  ]}
+                >
+                  {item.photo && (
+                    <Card.Cover
+                      source={{ uri: item.photo }}
+                      style={{
+                        height: 160,
+                        borderTopLeftRadius: 12,
+                        borderTopRightRadius: 12,
+                      }}
+                    />
+                  )}
+                  <Card.Title
+                    title={item.name}
+                    titleStyle={{ color: theme.colors.onSurface }}
+                    subtitleStyle={{ color: theme.colors.onSurface + "99" }}
+                    subtitle={`${item.address || ""} • ⭐${
+                      item.rating || "N/A"
+                    }`}
+                  />
+                  <Card.Actions>
+                    <Button
+                      onPress={() => openDetails(item.id)}
+                      textColor={theme.colors.primary}
+                    >
+                      View Details
+                    </Button>
+                  </Card.Actions>
+                </Card>
+              )}
+            />
+          </Animated.View>
+        )}
+      </ScrollView>
 
       <RestaurantDetailModal
         visible={modalVisible}
@@ -149,19 +324,69 @@ export default function SearchScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  appbar: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Platform.OS === "ios" ? 2 : 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  searchbarContainer: {
+    flex: 1,
+    justifyContent: "center",
+  },
   searchbar: {
     flex: 1,
     marginRight: 4,
     borderRadius: 8,
-    height: 42,
+    marginVertical: Platform.OS === "ios" ? 4 : 0,
   },
   scrollArea: {
     flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 12,
+    paddingBottom: 20,
   },
   card: {
     marginBottom: 16,
     borderRadius: 12,
+    overflow: "hidden",
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    textAlign: "center",
+    maxWidth: 250,
+  },
+  chipContainer: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 15,
+  },
+  chip: {
+    marginRight: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 34,
+    borderRadius: 16,
+    justifyContent: "center",
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: "500",
+    textTransform: "capitalize",
+  },
+  suggestionButton: {
+    alignItems: "flex-start",
+    borderRadius: 0,
+    paddingVertical: 6,
   },
 });

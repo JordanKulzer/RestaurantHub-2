@@ -7,9 +7,9 @@ import {
 import { useColorScheme } from "react-native";
 import { PaperProvider } from "react-native-paper";
 import AppNavigator from "./src/navigation/AppNavigator";
-import { theme } from "./src/theme";
-import { testGooglePlacesApi } from "./src/utils/testPlacesApi";
+import { theme, darkTheme } from "./src/theme";
 import Toast from "react-native-toast-message";
+import { testGooglePlacesApi } from "./src/utils/testPlacesApi";
 
 export default function App() {
   const colorScheme = useColorScheme();
@@ -20,7 +20,7 @@ export default function App() {
   }, []);
 
   return (
-    <PaperProvider theme={theme}>
+    <PaperProvider theme={isDark ? darkTheme : theme}>
       <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
         <AppNavigator />
       </NavigationContainer>

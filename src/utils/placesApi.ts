@@ -40,14 +40,16 @@ const metersToMiles = (m: number) => m * 0.000621371;
  */
 export async function fetchNearbyRestaurants({
   radiusMeters = 5000,
-  type = "restaurant",
+  type,
   minRating = 0,
   pageToken,
+  categories = [],
 }: {
   radiusMeters?: number;
   type?: string;
   minRating?: number;
   pageToken?: string;
+  categories?: string[];
 }): Promise<{ results: RestaurantResult[]; nextToken: string | null }> {
   const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== "granted") throw new Error("Location permission not granted");
@@ -55,11 +57,32 @@ export async function fetchNearbyRestaurants({
   const { coords } = await Location.getCurrentPositionAsync({});
   const { latitude, longitude } = coords;
 
-  const params = pageToken
-    ? `pagetoken=${pageToken}`
-    : `location=${latitude},${longitude}&radius=${radiusMeters}&type=${type}`;
+  // 🧭 Determine what 'type' and 'keyword' to use
+  let matchedType: string | undefined;
+  let extraKeywords: string[] = [];
+
+  if (categories.length > 0) {
+    const mapped = categories.map((c) => categoryTypeMap[c.toLowerCase()]);
+    const types = mapped.map((m) => m?.type).filter(Boolean) as string[];
+    const keywords = mapped.map((m) => m?.keyword).filter(Boolean) as string[];
+
+    // Use first type if consistent, otherwise no explicit type
+    const uniqueTypes = [...new Set(types)];
+    matchedType = uniqueTypes.length === 1 ? uniqueTypes[0] : undefined;
+    extraKeywords = keywords;
+  }
+
+  // 🚫 Don’t default to “restaurant” — let Google decide based on category
+  let params = `location=${latitude},${longitude}&radius=${radiusMeters}`;
+
+  if (matchedType) params += `&type=${matchedType}`;
+  if (extraKeywords.length > 0)
+    params += `&keyword=${encodeURIComponent(extraKeywords.join(" "))}`;
+  if (pageToken) params = `pagetoken=${pageToken}`;
 
   const url = `${GOOGLE_PLACES_BASE}?${params}&key=${API_KEY}`;
+  console.log("🍽️ Fetching nearby restaurants:", url);
+
   const res = await fetch(url);
   const data = await res.json();
 
