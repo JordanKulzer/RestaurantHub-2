@@ -8,7 +8,7 @@ import {
   useTheme,
   Icon,
 } from "react-native-paper";
-import { getLists, addToList, SavedList } from "../utils/tempListStorage";
+import { getLists, addToList } from "../utils/listsApi";
 
 interface Props {
   restaurant: any;
@@ -16,6 +16,13 @@ interface Props {
   onToggleFavorite: (r: any) => void;
   onCreateNewList: () => void;
 }
+
+type ListRow = {
+  id: string;
+  title: string;
+  description?: string | null;
+  created_at: string;
+};
 
 export default function RestaurantOptionsMenu({
   restaurant,
@@ -25,7 +32,7 @@ export default function RestaurantOptionsMenu({
 }: Props) {
   const theme = useTheme();
   const [visible, setVisible] = useState(false);
-  const [lists, setLists] = useState<SavedList[]>([]);
+  const [lists, setLists] = useState<ListRow[]>([]);
 
   const openMenu = async () => {
     await loadLists();
@@ -155,7 +162,7 @@ export default function RestaurantOptionsMenu({
             <Menu.Item
               key={l.id}
               onPress={() => handleAddToList(l.id)}
-              title={`Add to ${l.name}`}
+              title={`Add to ${l.title}`}
               leadingIcon={() => renderIcon("playlist-plus")}
               titleStyle={{ color: theme.colors.tertiary }}
               rippleColor={theme.colors.tertiary + "22"}

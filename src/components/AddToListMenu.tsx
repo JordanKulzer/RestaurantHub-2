@@ -9,12 +9,7 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
-import {
-  getLists,
-  createList,
-  addToList,
-  SavedList,
-} from "../utils/tempListStorage";
+import { getLists, createList, addToList, SavedList } from "../utils/listsApi";
 
 interface AddToListMenuProps {
   visible: boolean;

@@ -28,6 +28,10 @@
     },
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "EXPO_PUBLIC_SUPABASE_URL": "https://gkjozcdtzrnkuhxrqdyz.supabase.co",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdram96Y2R0enJua3VoeHJxZHl6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5ODMwNjYsImV4cCI6MjA3ODU1OTA2Nn0.J_qqdE9AEq9Ce2fW1Wa3zidPzx0BBriJr9x_uhWhRT8"
+    }
   }
 }

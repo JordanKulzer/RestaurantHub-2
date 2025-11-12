@@ -127,6 +127,7 @@ export default function HomeScreen() {
       });
       setRestaurants(filtered.sort(() => Math.random() - 0.5));
       animateFadeIn();
+      setCurrentRestaurant(filtered[0] ?? null);
     } catch (err) {
       console.error("❌ Error fetching Yelp restaurants:", err);
     } finally {

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -20,6 +20,7 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CreateListModal } from "../components";
+import { getLists } from "../utils/listsApi";
 
 const mockStarred = [
   {
@@ -62,9 +63,17 @@ const mockLists = [
 
 export default function FavoritesScreen() {
   const theme = useTheme();
-  const [lists, setLists] = useState(mockLists);
+  const [lists, setLists] = useState<any[]>([]);
   const [starred, setStarred] = useState(mockStarred);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      const data = await getLists();
+      setLists(data);
+    };
+    load();
+  }, []);
 
   const renderStarred = ({ item }: any) => (
     <TouchableOpacity style={styles.starredItem}>
