@@ -13,6 +13,8 @@ export const theme = {
     onSurface: colors.textPrimary,
     onBackground: colors.textPrimary,
     outline: colors.borderLight,
+    likeColor: colors.likeColor,
+    dislikeColor: colors.dislikeColor,
   },
 };
 
@@ -28,5 +30,7 @@ export const darkTheme = {
     onSurface: "#EAEAEA",
     onBackground: "#EAEAEA",
     outline: colors.borderDark,
+    likeColor: colors.likeColor,
+    dislikeColor: colors.dislikeColor,
   },
 };

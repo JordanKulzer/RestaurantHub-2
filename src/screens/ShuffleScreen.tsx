@@ -13,6 +13,7 @@ import {
   fetchRestaurantDetails,
 } from "../utils/placesApi";
 import Toast from "react-native-toast-message";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function ShuffleScreen() {
   const theme = useTheme();
@@ -113,12 +114,14 @@ export default function ShuffleScreen() {
   const textColor = theme.colors.onSurface;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      edges={["top", "left", "right"]}
+    >
       <LinearGradient
         colors={[theme.colors.background, surface]}
         style={StyleSheet.absoluteFill}
       />
-
       {phase === "eliminate" ? (
         <View style={styles.container}>
           <View style={styles.headerRow}>
@@ -283,13 +286,12 @@ export default function ShuffleScreen() {
           </Button>
         </View>
       )}
-
       <RestaurantDetailModal
         visible={showDetails}
         onDismiss={() => setShowDetails(false)}
         restaurant={selectedRestaurant}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

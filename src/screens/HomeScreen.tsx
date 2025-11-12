@@ -1,42 +1,38 @@
-import React, {
-  useEffect,
-  useState,
-  useRef,
-  useLayoutEffect,
-  useCallback,
-} from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   View,
   StyleSheet,
   Animated,
-  TouchableWithoutFeedback,
   Platform,
   UIManager,
   Easing,
-  StyleSheet as RNStyleSheet,
+  TouchableOpacity,
+  ScrollView,
 } from "react-native";
 import {
   Button,
+  Chip,
   IconButton,
-  Text,
+  Modal,
   Portal,
   Surface,
+  Text,
   useTheme,
 } from "react-native-paper";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Swiper from "react-native-deck-swiper";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { BlurView } from "expo-blur";
 import * as Location from "expo-location";
 import { fetchYelpRestaurants } from "../utils/yelpApi";
 import HomeSkeleton from "../components/HomeSkeleton";
 import {
   RestaurantDetailModal,
   HomeSwipeCard,
-  DropdownModal,
+  AddToListModal,
 } from "../components";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 if (
   Platform.OS === "android" &&
@@ -68,104 +64,37 @@ export default function HomeScreen() {
   const [showDetails, setShowDetails] = useState(false);
   const [selectedRestaurant, setSelectedRestaurant] = useState<any>(null);
   const [liked, setLiked] = useState<Restaurant[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
+
+  const [showChips, setShowChips] = useState(false);
+  const [activeModal, setActiveModal] = useState<
+    "category" | "rating" | "location" | "distance" | null
+  >(null);
+  const [addToListModalVisible, setAddToListModalVisible] = useState(false);
   const [filters, setFilters] = useState<string[]>([]);
   const [ratingFilter, setRatingFilter] = useState<string>("all");
   const [distanceFilter, setDistanceFilter] = useState<string>("any");
   const [allSwiped, setAllSwiped] = useState(false);
-  const [lastSwiped, setLastSwiped] = useState<Restaurant | null>(null);
-  const [rewindCard, setRewindCard] = useState<Restaurant | null>(null);
-  const [rewindDir, setRewindDir] = useState<"left" | "right">("left");
-  const [isRewinding, setIsRewinding] = useState(false);
 
-  const slideAnim = useRef(new Animated.Value(-300)).current;
-  const dimAnim = useRef(new Animated.Value(0)).current;
   const swiperRef = useRef<Swiper<Restaurant>>(null);
-  const swiperAnim = useRef(new Animated.Value(1)).current;
-  const rewindAnim = useRef(new Animated.Value(0)).current;
   const [lastSwipedIndex, setLastSwipedIndex] = useState<number | null>(null);
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const slideAnim = useRef(new Animated.Value(0)).current;
 
-  const useScaleOnPress = () => {
-    const scale = useRef(new Animated.Value(1)).current;
-    const onPressIn = () =>
-      Animated.spring(scale, { toValue: 0.85, useNativeDriver: true }).start();
-    const onPressOut = () =>
-      Animated.spring(scale, {
-        toValue: 1,
-        friction: 3,
-        useNativeDriver: true,
-      }).start();
-    return { scale, onPressIn, onPressOut };
+  const animateFilterToggle = () => {
+    Animated.spring(slideAnim, {
+      toValue: showChips ? 0 : 1,
+      friction: 6,
+      tension: 80,
+      useNativeDriver: false,
+    }).start();
+    setShowChips(!showChips);
   };
-
-  useEffect(() => {
-    const init = async () => {
-      await loadRestaurants();
-      const saved = await AsyncStorage.getItem("likedRestaurants");
-      if (saved) setLiked(JSON.parse(saved));
-    };
-    init();
-  }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      AsyncStorage.setItem("likedRestaurants", JSON.stringify(liked));
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [liked]);
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <View style={{ flexDirection: "row" }}>
-          <IconButton
-            icon="filter-variant"
-            onPress={toggleFilters}
-            accessibilityLabel="Open filters"
-            iconColor={theme.colors.tertiary}
-          />
-        </View>
-      ),
-    });
-  }, [navigation, theme]);
-
-  const toggleFilters = useCallback(() => {
-    if (showFilters) {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: -300,
-          duration: 250,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(dimAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => setShowFilters(false));
-    } else {
-      setShowFilters(true);
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 300,
-          easing: Easing.out(Easing.exp),
-          useNativeDriver: true,
-        }),
-        Animated.timing(dimAnim, {
-          toValue: 0.5,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [showFilters]);
 
   const loadRestaurants = async () => {
     try {
       setLoading(true);
       setAllSwiped(false);
+      setCurrentCardIndex(0);
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         console.warn("⚠️ Location permission not granted");
@@ -196,354 +125,371 @@ export default function HomeScreen() {
     }
   };
 
-  // --- swipe buttons ---
-  const UndoButton = () => {
-    const { scale, onPressIn, onPressOut } = useScaleOnPress();
-    const handleUndo = () => {
-      if (lastSwipedIndex === null || !restaurants[lastSwipedIndex]) return;
-      const rewindTarget = restaurants[lastSwipedIndex];
-      setRewindCard(rewindTarget);
-      setIsRewinding(true);
-      rewindAnim.setValue(0);
-      Animated.timing(rewindAnim, {
-        toValue: 1,
-        duration: 400,
-        easing: Easing.out(Easing.exp),
-        useNativeDriver: true,
-      }).start(() => {
-        swiperRef.current?.swipeBack();
-        setTimeout(() => {
-          setRewindCard(null);
-          setIsRewinding(false);
-        }, 100);
-      });
+  useEffect(() => {
+    const init = async () => {
+      await loadRestaurants();
+      const saved = await AsyncStorage.getItem("likedRestaurants");
+      if (saved) setLiked(JSON.parse(saved));
     };
-    return (
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <IconButton
-          icon="undo"
-          size={36}
-          onPressIn={onPressIn}
-          onPressOut={onPressOut}
-          mode="contained"
-          onPress={handleUndo}
-          style={[styles.actionBtn, { backgroundColor: theme.colors.primary }]}
-          iconColor="#fff"
-        />
-      </Animated.View>
-    );
-  };
+    init();
+  }, []);
 
-  const DislikeButton = () => {
-    const { scale, onPressIn, onPressOut } = useScaleOnPress();
-    return (
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <IconButton
-          icon="close"
-          size={52}
-          onPressIn={onPressIn}
-          onPressOut={onPressOut}
-          mode="contained"
-          onPress={() => swiperRef.current?.swipeLeft()}
-          style={[
-            styles.actionBtn,
-            { backgroundColor: theme.colors.secondary },
-          ]}
-          iconColor="#fff"
-        />
-      </Animated.View>
-    );
-  };
+  const renderModal = (type: string) => (
+    <Portal>
+      <Modal
+        visible={activeModal === type}
+        onDismiss={() => setActiveModal(null)}
+        contentContainerStyle={[
+          styles.modalContainer,
+          { backgroundColor: theme.colors.surface },
+        ]}
+      >
+        <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
+          {type === "category"
+            ? "Select Categories"
+            : type === "rating"
+            ? "Select Rating"
+            : type === "location"
+            ? "Choose Location"
+            : "Select Distance"}
+        </Text>
 
-  const LikeButton = () => {
-    const { scale, onPressIn, onPressOut } = useScaleOnPress();
-    return (
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <IconButton
-          icon="heart"
-          size={52}
-          onPressIn={onPressIn}
-          onPressOut={onPressOut}
-          mode="contained"
-          onPress={() => swiperRef.current?.swipeRight()}
-          style={[styles.actionBtn, { backgroundColor: theme.colors.tertiary }]}
-          iconColor="#fff"
-        />
-      </Animated.View>
-    );
-  };
+        {type === "category" && (
+          <View style={styles.chipGrid}>
+            {CATEGORY_OPTIONS.slice(0, 12).map((opt) => {
+              const selected = filters.includes(opt.value);
+              return (
+                <Chip
+                  key={opt.value}
+                  mode={selected ? "flat" : "outlined"}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: selected
+                        ? theme.colors.primary
+                        : "transparent",
+                    },
+                  ]}
+                  textStyle={{
+                    color: selected ? "#fff" : theme.colors.onSurfaceVariant,
+                    fontWeight: "500",
+                  }}
+                  onPress={() =>
+                    setFilters((prev) =>
+                      prev.includes(opt.value)
+                        ? prev.filter((v) => v !== opt.value)
+                        : [...prev, opt.value]
+                    )
+                  }
+                >
+                  {opt.label}
+                </Chip>
+              );
+            })}
+          </View>
+        )}
+
+        {type === "rating" && (
+          <View style={styles.chipRow}>
+            {[
+              { label: "All", value: "all" },
+              { label: "3★+", value: "3" },
+              { label: "3.5★+", value: "3.5" },
+              { label: "4★+", value: "4" },
+              { label: "4.5★+", value: "4.5" },
+            ].map((opt) => {
+              const selected = ratingFilter === opt.value;
+              return (
+                <Chip
+                  key={opt.value}
+                  mode={selected ? "flat" : "outlined"}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: selected
+                        ? theme.colors.primary
+                        : "transparent",
+                    },
+                  ]}
+                  textStyle={{
+                    color: selected ? "#fff" : theme.colors.onSurfaceVariant,
+                    fontWeight: "500",
+                  }}
+                  onPress={() => setRatingFilter(opt.value)}
+                >
+                  {opt.label}
+                </Chip>
+              );
+            })}
+          </View>
+        )}
+
+        {type === "distance" && (
+          <View style={styles.chipRow}>
+            {[
+              { label: "Any", value: "any" },
+              { label: "≤1 mi", value: "1" },
+              { label: "≤3 mi", value: "3" },
+              { label: "≤5 mi", value: "5" },
+            ].map((opt) => {
+              const selected = distanceFilter === opt.value;
+              return (
+                <Chip
+                  key={opt.value}
+                  mode={selected ? "flat" : "outlined"}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: selected
+                        ? theme.colors.primary
+                        : "transparent",
+                    },
+                  ]}
+                  textStyle={{
+                    color: selected ? "#fff" : theme.colors.onSurfaceVariant,
+                    fontWeight: "500",
+                  }}
+                  onPress={() => setDistanceFilter(opt.value)}
+                >
+                  {opt.label}
+                </Chip>
+              );
+            })}
+          </View>
+        )}
+
+        {type === "location" && (
+          <View
+            style={{
+              height: 160,
+              backgroundColor: theme.colors.surfaceVariant,
+              borderRadius: 12,
+              justifyContent: "center",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <Icon name="map-marker" size={48} color={theme.colors.primary} />
+            <Text
+              style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}
+            >
+              Drop a pin here (placeholder)
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.modalButtons}>
+          <Button
+            mode="contained"
+            onPress={async () => {
+              setActiveModal(null);
+              await loadRestaurants();
+            }}
+            buttonColor={theme.colors.secondary}
+            textColor="#fff"
+            style={{ borderRadius: 25, flex: 1, marginRight: 8 }}
+          >
+            Apply
+          </Button>
+          <Button
+            mode="outlined"
+            onPress={() => {
+              if (type === "category") setFilters([]);
+              else if (type === "rating") setRatingFilter("all");
+              else if (type === "distance") setDistanceFilter("any");
+              else if (type === "location") {
+                console.log("Location filter cleared");
+              }
+            }}
+            textColor={theme.colors.onSurface}
+            style={{ borderRadius: 25, flex: 1 }}
+          >
+            Clear
+          </Button>
+        </View>
+      </Modal>
+    </Portal>
+  );
 
   return (
-    <>
-      <Animated.View
-        style={{ flex: 1, backgroundColor: theme.colors.background }}
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      edges={["top", "left", "right"]}
+    >
+      {/* --- Filter Header --- */}
+      <View
+        style={{
+          paddingHorizontal: 16,
+          backgroundColor: theme.colors.background,
+          zIndex: 10,
+        }}
       >
-        {loading ? (
-          <HomeSkeleton />
-        ) : restaurants.length === 0 ? (
-          <View style={styles.empty}>
-            <Icon
-              name="emoticon-sad-outline"
-              size={48}
-              color={theme.colors.outline}
-            />
-            <Text
-              style={[
-                styles.emptyText,
-                { color: theme.colors.onSurface + "AA" },
-              ]}
-            >
-              No restaurants found nearby
-            </Text>
-          </View>
-        ) : allSwiped ? (
-          <View style={styles.empty}>
-            <Icon name="refresh" size={48} color={theme.colors.outline} />
-            <Text
-              style={[
-                styles.emptyText,
-                { color: theme.colors.onSurface + "AA" },
-              ]}
-            >
-              No more restaurants nearby
-            </Text>
-            <Button
-              mode="contained"
-              onPress={loadRestaurants}
-              buttonColor={theme.colors.secondary}
-              textColor="#fff"
-            >
-              Refresh
-            </Button>
-          </View>
-        ) : (
-          <Animated.View
-            style={[
-              styles.swiperContainer,
-              {
-                opacity: isRewinding ? 0 : 1,
-                transform: [{ scale: swiperAnim }],
-              },
-            ]}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 22,
+              fontWeight: "700",
+              color: theme.colors.primary,
+              letterSpacing: 0.5,
+            }}
           >
-            {!isRewinding && (
-              <Swiper
-                ref={swiperRef}
-                cards={restaurants}
-                renderCard={(r) => <HomeSwipeCard restaurant={r} />}
-                onSwipedRight={(idx) => {
-                  if (restaurants[idx]) {
-                    setLastSwiped(restaurants[idx]);
-                    setRewindDir("right");
-                    setLastSwipedIndex(idx);
-                    setLiked((prev) =>
-                      prev.some((f) => f.id === restaurants[idx].id)
-                        ? prev
-                        : [...prev, restaurants[idx]]
-                    );
-                  }
-                }}
-                onSwipedLeft={(idx) => {
-                  if (restaurants[idx]) {
-                    setLastSwiped(restaurants[idx]);
-                    setRewindDir("left");
-                    setLastSwipedIndex(idx);
-                  }
-                }}
-                onSwipedAll={() => setAllSwiped(true)}
-                backgroundColor="transparent"
-                stackSize={2}
-                verticalSwipe={false}
-                animateCardOpacity
-                cardVerticalMargin={0}
-                containerStyle={{ flex: 1 }}
-                cardStyle={{ height: "100%" }}
-              />
-            )}
-          </Animated.View>
-        )}
+            FoodFinder
+          </Text>
+          <IconButton
+            icon="plus-circle-outline"
+            size={26}
+            iconColor={theme.colors.primary}
+            onPress={() => setAddToListModalVisible(true)}
+          />
+        </View>
 
-        {rewindCard && (
-          <Animated.View
-            key={rewindCard.id}
-            style={[
-              styles.rewindCard,
-              {
-                transform: [
-                  {
-                    translateX: rewindAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [rewindDir === "left" ? -400 : 400, 0],
-                    }),
-                  },
-                  {
-                    rotate: rewindAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [
-                        rewindDir === "left" ? "-10deg" : "10deg",
-                        "0deg",
-                      ],
-                    }),
-                  },
-                ],
-                opacity: rewindAnim,
-              },
-            ]}
-          >
-            <HomeSwipeCard restaurant={rewindCard} />
-          </Animated.View>
-        )}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScroll}
+        >
+          {["Category", "Rating", "Location", "Distance"].map((label) => {
+            const isActive =
+              (label === "Category" && filters.length > 0) ||
+              (label === "Rating" && ratingFilter !== "all") ||
+              (label === "Distance" && distanceFilter !== "any") ||
+              (label === "Location" && activeModal === "location");
 
-        {!loading && !allSwiped && restaurants.length > 0 && (
-          <View style={styles.actionBar}>
-            <DislikeButton />
-            <UndoButton />
-            <LikeButton />
-          </View>
-        )}
-      </Animated.View>
+            const backgroundColor = isActive
+              ? theme.colors.primary
+              : "transparent";
+            const textColor = isActive ? "#fff" : theme.colors.primary;
 
-      {/* Filter modal */}
-      <Portal>
-        {showFilters && (
-          <TouchableWithoutFeedback onPress={toggleFilters}>
-            <View style={RNStyleSheet.absoluteFillObject}>
-              <Animated.View
+            return (
+              <Chip
+                key={label}
+                mode="outlined"
                 style={[
-                  RNStyleSheet.absoluteFillObject,
-                  { backgroundColor: "black", opacity: dimAnim },
+                  styles.chip,
+                  {
+                    borderColor: theme.colors.primary,
+                    backgroundColor,
+                    marginRight: 8,
+                  },
                 ]}
+                textStyle={{
+                  color: textColor,
+                  fontWeight: "600",
+                }}
+                onPress={() => setActiveModal(label.toLowerCase() as any)}
+              >
+                {label}
+              </Chip>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      <View style={{ flex: 1, marginTop: 10, marginBottom: 120 }}>
+        <Swiper
+          ref={swiperRef}
+          cards={restaurants}
+          renderCard={(r) =>
+            r ? (
+              <HomeSwipeCard
+                key={`card-${r.id}-${currentCardIndex}`}
+                restaurant={r}
+                onLike={() => swiperRef.current?.swipeRight()}
+                onDislike={() => swiperRef.current?.swipeLeft()}
+                onUndo={() => swiperRef.current?.swipeBack()}
               />
-              <BlurView intensity={70} tint="light" style={styles.blurOverlay}>
-                <Animated.View
-                  style={[
-                    styles.animatedContainer,
-                    { transform: [{ translateY: slideAnim }] },
-                  ]}
-                >
-                  <Surface
-                    style={[
-                      styles.filterBar,
-                      { backgroundColor: theme.colors.surface },
-                    ]}
-                  >
-                    <View style={styles.filterRow}>
-                      <DropdownModal
-                        label="Categories"
-                        options={CATEGORY_OPTIONS}
-                        value={filters}
-                        onChange={setFilters}
-                        multiSelect
-                      />
-                      <DropdownModal
-                        label="Rating"
-                        options={[
-                          { label: "All", value: "all" },
-                          { label: "4★+", value: "4" },
-                          { label: "4.5★+", value: "4.5" },
-                        ]}
-                        value={ratingFilter}
-                        onChange={(val) => setRatingFilter(val)}
-                      />
-                      <DropdownModal
-                        label="Distance"
-                        options={[
-                          { label: "Any", value: "any" },
-                          { label: "≤1 mi", value: "1" },
-                          { label: "≤3 mi", value: "3" },
-                          { label: "≤5 mi", value: "5" },
-                        ]}
-                        value={distanceFilter}
-                        onChange={(val) => setDistanceFilter(val)}
-                      />
-                    </View>
+            ) : null
+          }
+          onSwiped={(index) => {
+            setCurrentCardIndex(index + 1);
+          }}
+          onSwipedAll={() => setAllSwiped(true)}
+          backgroundColor="transparent"
+          stackSize={2}
+          verticalSwipe={false}
+          animateCardOpacity
+          cardVerticalMargin={0}
+          containerStyle={{ flex: 1 }}
+          cardStyle={{ height: "100%" }}
+        />
+      </View>
 
-                    <Button
-                      mode="contained"
-                      icon="check"
-                      compact
-                      onPress={() => {
-                        toggleFilters();
-                        loadRestaurants();
-                      }}
-                      buttonColor={theme.colors.secondary}
-                      textColor="#fff"
-                      style={styles.applyButton}
-                    >
-                      Apply
-                    </Button>
-                  </Surface>
-                </Animated.View>
-              </BlurView>
-            </View>
-          </TouchableWithoutFeedback>
-        )}
-      </Portal>
-
+      {/* --- Modals --- */}
+      {renderModal("category")}
+      {renderModal("rating")}
+      {renderModal("location")}
+      {renderModal("distance")}
       <RestaurantDetailModal
         visible={showDetails}
         onDismiss={() => setShowDetails(false)}
         restaurant={selectedRestaurant}
       />
-    </>
+
+      <AddToListModal
+        visible={addToListModalVisible}
+        onDismiss={() => setAddToListModalVisible(false)}
+        restaurant={selectedRestaurant}
+        onAddToLiked={(r) => {
+          setLiked((prev) => [...prev, r]);
+          console.log("✅ Added to liked:", r.name);
+        }}
+        onAddToExistingList={(r) => {
+          console.log("🗂️ Add to existing list:", r.name);
+        }}
+        onCreateNewList={(r) => {
+          console.log("🆕 Create new list with:", r.name);
+        }}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  blurOverlay: {
-    flex: 1,
-    justifyContent: "flex-start",
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
     alignItems: "center",
-    paddingTop: 100,
   },
-  animatedContainer: { width: "95%" },
-  filterBar: {
+  chipGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  chip: {
     borderRadius: 18,
-    padding: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 5,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  filterRow: {
+  chipScroll: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingRight: 10,
+  },
+  modalContainer: {
+    marginTop: "auto",
+    marginHorizontal: 10,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  modalButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
-  },
-  applyButton: {
-    alignSelf: "center",
-    marginTop: 10,
-    borderRadius: 25,
-    paddingHorizontal: 30,
-  },
-  empty: {
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  emptyText: {
-    fontSize: 16,
-    marginVertical: 12,
-    textAlign: "center",
-  },
-  swiperContainer: { flex: 1 },
-  actionBar: {
-    position: "absolute",
-    bottom: 40,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "space-evenly",
-    alignItems: "center",
-    zIndex: 50,
-  },
-  actionBtn: { elevation: 6 },
-  rewindCard: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 20,
+    marginTop: 16,
   },
 });

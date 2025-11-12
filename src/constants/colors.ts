@@ -1,8 +1,11 @@
 // src/constants/colors.ts
 export default {
   primary: "#1B3A4B", // deep navy
-  secondary: "#C15B2A", // burnt orange (formerly accent)
-  tertiary: "#2E604C", // forest green 1B3A4B
+  secondary: "#C15B2A", // burnt orange
+  tertiary: "#2E604C", // forest green
+
+  likeColor: "#C75C48", // clay Red
+  dislikeColor: "#6E7075", // cool graphite
 
   textPrimary: "#1E1E1E",
   textSecondary: "#4A4A4A",

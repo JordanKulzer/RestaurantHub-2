@@ -10,6 +10,7 @@ import AppNavigator from "./src/navigation/AppNavigator";
 import { theme, darkTheme } from "./src/theme";
 import Toast from "react-native-toast-message";
 import { testGooglePlacesApi } from "./src/utils/testPlacesApi";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 export default function App() {
   const colorScheme = useColorScheme();
@@ -20,11 +21,13 @@ export default function App() {
   }, []);
 
   return (
-    <PaperProvider theme={isDark ? darkTheme : theme}>
-      <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
-        <AppNavigator />
-      </NavigationContainer>
-      <Toast />
-    </PaperProvider>
+    <SafeAreaProvider>
+      <PaperProvider theme={isDark ? darkTheme : theme}>
+        <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
+          <AppNavigator />
+        </NavigationContainer>
+        <Toast />
+      </PaperProvider>
+    </SafeAreaProvider>
   );
 }

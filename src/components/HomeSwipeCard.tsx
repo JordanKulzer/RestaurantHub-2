@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Image,
@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
+  Animated,
+  Easing,
 } from "react-native";
 import {
   Card,
@@ -14,25 +16,59 @@ import {
   useTheme,
   Portal,
   Modal,
+  IconButton,
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import ImageViewing from "react-native-image-viewing";
 import { fetchYelpDetails } from "../utils/yelpApi";
 
-export default function HomeSwipeCard({ restaurant }: any) {
+interface HomeSwipeCardProps {
+  restaurant: any;
+  onLike?: () => void;
+  onDislike?: () => void;
+  onUndo?: () => void;
+}
+
+export default function HomeSwipeCard({
+  restaurant,
+  onLike,
+  onDislike,
+  onUndo,
+}: HomeSwipeCardProps) {
   const theme = useTheme();
+  const defaultPhoto =
+    restaurant.image ||
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png";
+
   const [viewerVisible, setViewerVisible] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [photos, setPhotos] = useState<string[]>([
-    restaurant.image ||
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png",
-  ]);
+  const [photos, setPhotos] = useState<string[]>([defaultPhoto]);
   const [hasLoadedDetails, setHasLoadedDetails] = useState(false);
   const [hoursVisible, setHoursVisible] = useState(false);
   const [hours, setHours] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState<boolean | null>(
     restaurant.isOpen ?? null
   );
+  const likeScale = useRef(new Animated.Value(1)).current;
+  const dislikeScale = useRef(new Animated.Value(1)).current;
+  const undoScale = useRef(new Animated.Value(1)).current;
+
+  const pulse = (anim: Animated.Value, callback?: () => void) => {
+    Animated.sequence([
+      Animated.timing(anim, {
+        toValue: 0.9,
+        duration: 80,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.ease),
+      }),
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 80,
+        useNativeDriver: true,
+        easing: Easing.in(Easing.ease),
+      }),
+    ]).start(() => callback && callback());
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -69,14 +105,19 @@ export default function HomeSwipeCard({ restaurant }: any) {
     setActiveIndex((prev) => (prev + 1) % photos.length);
   };
 
+  // Ensure we always have a photo to display
+  const currentPhoto = photos[0] || defaultPhoto;
+
   return (
     <Card
       mode="elevated"
       style={[styles.card, { backgroundColor: theme.colors.surface }]}
     >
+      {/* --- Image + Gradient --- */}
       <TouchableOpacity activeOpacity={0.9} onPress={handleNextPhoto}>
         <Image
-          source={{ uri: photos[activeIndex] }}
+          key={restaurant.id}
+          source={{ uri: photos[activeIndex] || defaultPhoto }}
           style={styles.carouselImage}
           resizeMode="cover"
         />
@@ -103,10 +144,12 @@ export default function HomeSwipeCard({ restaurant }: any) {
         </View>
       </TouchableOpacity>
 
+      {/* --- Info Section --- */}
       <View style={styles.infoSection}>
         <Text style={[styles.name, { color: theme.colors.onSurface }]}>
           {restaurant.name}
         </Text>
+
         <View style={styles.metaRow}>
           {restaurant.rating && (
             <Text style={[styles.metaText, { color: theme.colors.onSurface }]}>
@@ -120,7 +163,7 @@ export default function HomeSwipeCard({ restaurant }: any) {
                 { color: theme.colors.onSurface + "99" },
               ]}
             >
-              ({restaurant.reviews})
+              ({restaurant.reviews} reviews)
             </Text>
           )}
           {restaurant.price && (
@@ -150,16 +193,23 @@ export default function HomeSwipeCard({ restaurant }: any) {
             </Text>
           )}
 
-          <Button
-            mode="contained-tonal"
-            compact
+          <TouchableOpacity
+            style={[{ paddingVertical: 4 }]}
             onPress={() => setHoursVisible(true)}
-            textColor={theme.colors.primary}
-            style={{ marginLeft: 8, borderRadius: 20, paddingHorizontal: 10 }}
-            labelStyle={{ fontWeight: "600" }}
+            activeOpacity={0.7}
           >
-            View Hours
-          </Button>
+            <Text
+              style={{
+                marginLeft: 8,
+                color: theme.colors.primary,
+                fontWeight: "600",
+                textDecorationLine: "underline",
+                fontSize: 14,
+              }}
+            >
+              View Hours
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {restaurant.categories && (
@@ -187,6 +237,7 @@ export default function HomeSwipeCard({ restaurant }: any) {
           </Text>
         )}
 
+        {/* --- Link Buttons --- */}
         <View style={styles.linkRow}>
           {restaurant.yelpUrl && (
             <Button
@@ -207,7 +258,6 @@ export default function HomeSwipeCard({ restaurant }: any) {
             </Button>
           )}
 
-          {/* Google Maps fallback (placeId OR name/address) */}
           <Button
             mode="outlined"
             icon="google-maps"
@@ -221,24 +271,19 @@ export default function HomeSwipeCard({ restaurant }: any) {
               },
             ]}
             onPress={() => {
-              if (restaurant.placeId) {
-                Linking.openURL(
-                  `https://www.google.com/maps/place/?q=place_id:${restaurant.placeId}`
-                );
-              } else {
-                const query = encodeURIComponent(
-                  `${restaurant.name} ${restaurant.address || ""}`.trim()
-                );
-                Linking.openURL(
-                  `https://www.google.com/maps/search/?api=1&query=${query}`
-                );
-              }
+              const query = encodeURIComponent(
+                `${restaurant.name} ${restaurant.address || ""}`.trim()
+              );
+              Linking.openURL(
+                restaurant.placeId
+                  ? `https://www.google.com/maps/place/?q=place_id:${restaurant.placeId}`
+                  : `https://www.google.com/maps/search/?api=1&query=${query}`
+              );
             }}
           >
             Google
           </Button>
 
-          {/* Apple Maps */}
           {Platform.OS === "ios" && (
             <Button
               mode="outlined"
@@ -258,6 +303,51 @@ export default function HomeSwipeCard({ restaurant }: any) {
               Apple
             </Button>
           )}
+        </View>
+
+        {/* --- Like / Dislike / Undo Buttons --- */}
+        <View style={styles.actionRow}>
+          <Animated.View style={{ transform: [{ scale: dislikeScale }] }}>
+            <IconButton
+              icon="close"
+              size={36}
+              mode="contained"
+              style={[
+                styles.actionBtn,
+                { backgroundColor: (theme.colors as any).dislikeColor },
+              ]}
+              iconColor="#fff"
+              onPress={() => pulse(dislikeScale, onDislike)}
+            />
+          </Animated.View>
+
+          <Animated.View style={{ transform: [{ scale: undoScale }] }}>
+            <IconButton
+              icon="undo"
+              size={28}
+              mode="contained"
+              style={[
+                styles.actionBtnSmall,
+                { backgroundColor: theme.colors.primary },
+              ]}
+              iconColor="#fff"
+              onPress={() => pulse(undoScale, onUndo)}
+            />
+          </Animated.View>
+
+          <Animated.View style={{ transform: [{ scale: likeScale }] }}>
+            <IconButton
+              icon="heart"
+              size={36}
+              mode="contained"
+              style={[
+                styles.actionBtn,
+                { backgroundColor: (theme.colors as any).likeColor },
+              ]}
+              iconColor="#fff"
+              onPress={() => pulse(likeScale, onLike)}
+            />
+          </Animated.View>
         </View>
       </View>
 
@@ -346,22 +436,6 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     minWidth: 100,
   },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    marginBottom: 4,
-  },
-  hoursRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-
-  metaText: {
-    fontSize: 14,
-    marginRight: 6,
-  },
   hoursModal: {
     marginHorizontal: 20,
     borderRadius: 16,
@@ -374,9 +448,37 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textAlign: "center",
   },
+  hoursRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 8,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginBottom: 4,
+  },
+  metaText: {
+    fontSize: 14,
+    marginRight: 6,
+  },
   hoursText: {
     fontSize: 14,
     marginVertical: 2,
     textAlign: "center",
+  },
+  actionRow: {
+    flexDirection: "row",
+    justifyContent: "space-evenly",
+    alignItems: "center",
+    marginTop: 20,
+    paddingVertical: 10,
+  },
+  actionBtn: {
+    elevation: 6,
+  },
+  actionBtnSmall: {
+    elevation: 5,
   },
 });

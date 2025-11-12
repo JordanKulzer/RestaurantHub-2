@@ -27,6 +27,7 @@ import {
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import RestaurantDetailModal from "../components/RestaurantDetailModal";
 import HomeSkeleton from "../components/HomeSkeleton";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SearchScreen({ navigation }: any) {
   const theme = useTheme();
@@ -133,192 +134,196 @@ export default function SearchScreen({ navigation }: any) {
     query.trim().length === 0;
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      edges={["top", "left", "right"]}
     >
-      <LinearGradient
-        colors={
-          theme.dark
-            ? [theme.colors.background, theme.colors.surface]
-            : [theme.colors.surface, theme.colors.background]
-        }
-        style={StyleSheet.absoluteFill}
-      />
-
-      <Appbar.Header
-        mode="small"
-        elevated
-        statusBarHeight={0}
-        style={[
-          styles.appbar,
-          {
-            backgroundColor: theme.colors.surface,
-            borderBottomColor: theme.colors.outline,
-          },
-        ]}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
       >
-        <Appbar.BackAction
-          onPress={() => navigation.goBack()}
-          color={theme.colors.primary}
+        <LinearGradient
+          colors={
+            theme.dark
+              ? [theme.colors.background, theme.colors.surface]
+              : [theme.colors.surface, theme.colors.background]
+          }
+          style={StyleSheet.absoluteFill}
         />
-        <View style={styles.searchbarContainer}>
-          <Searchbar
-            placeholder="Type or search with your voice"
-            value={query}
-            onChangeText={handleInputChange}
-            onSubmitEditing={() => handleSearch()}
-            style={[
-              styles.searchbar,
-              { backgroundColor: theme.colors.background },
-            ]}
-            inputStyle={{ fontSize: 15, color: theme.colors.onSurface }}
-            autoFocus
-            iconColor={theme.colors.primary}
-            placeholderTextColor={theme.colors.onSurface + "88"}
+
+        <Appbar.Header
+          mode="small"
+          elevated
+          statusBarHeight={0}
+          style={[
+            styles.appbar,
+            {
+              backgroundColor: theme.colors.surface,
+              borderBottomColor: theme.colors.outline,
+            },
+          ]}
+        >
+          <Appbar.BackAction
+            onPress={() => navigation.goBack()}
+            color={theme.colors.primary}
           />
-        </View>
-        <Appbar.Action
-          icon="microphone"
-          onPress={() => {}}
-          color={theme.colors.primary}
-        />
-      </Appbar.Header>
-
-      {/* Chips row always visible */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipContainer}
-      >
-        {CATEGORY_OPTIONS.map((opt) => {
-          const isSelected = selectedCategory === opt.value;
-          return (
-            <Chip
-              compact
-              key={opt.value}
-              onPress={() => handleCategorySelect(opt.value)}
-              selected={isSelected}
+          <View style={styles.searchbarContainer}>
+            <Searchbar
+              placeholder="Type or search with your voice"
+              value={query}
+              onChangeText={handleInputChange}
+              onSubmitEditing={() => handleSearch()}
               style={[
-                styles.chip,
-                {
-                  backgroundColor: isSelected
-                    ? theme.colors.secondary
-                    : theme.colors.surface,
-                  borderColor: theme.colors.outline,
-                },
+                styles.searchbar,
+                { backgroundColor: theme.colors.background },
               ]}
-              textStyle={{
-                color: isSelected
-                  ? theme.colors.onPrimary || "#fff"
-                  : theme.colors.onSurface,
-              }}
-              selectedColor={theme.colors.onPrimary}
-            >
-              {opt.label}
-            </Chip>
-          );
-        })}
-      </ScrollView>
-
-      {/* Main scroll area for suggestions/results/empty */}
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 20 }}
-      >
-        {showEmptyState && (
-          <View style={styles.emptyState}>
-            <Text
-              style={[styles.emptyTitle, { color: theme.colors.onSurface }]}
-            >
-              Find your next favorite spot
-            </Text>
-            <Text
-              style={[
-                styles.emptySubtitle,
-                { color: theme.colors.onSurface + "99" },
-              ]}
-            >
-              Search by cuisine, restaurant name, or vibe.
-            </Text>
-          </View>
-        )}
-
-        {!loading &&
-          suggestions.map((s) => (
-            <Button
-              key={s.id}
-              onPress={() => openDetails(s.id)}
-              style={styles.suggestionButton}
-              textColor={theme.colors.primary}
-              contentStyle={{ justifyContent: "flex-start" }}
-            >
-              {s.name}
-            </Button>
-          ))}
-
-        {loading && (
-          <View style={{ padding: 16 }}>
-            <HomeSkeleton />
-          </View>
-        )}
-
-        {!loading && results.length > 0 && (
-          <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-            <FlatList
-              data={results}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={styles.scrollArea}
-              renderItem={({ item }) => (
-                <Card
-                  mode="elevated"
-                  style={[
-                    styles.card,
-                    { backgroundColor: theme.colors.surface },
-                  ]}
-                >
-                  {item.photo && (
-                    <Card.Cover
-                      source={{ uri: item.photo }}
-                      style={{
-                        height: 160,
-                        borderTopLeftRadius: 12,
-                        borderTopRightRadius: 12,
-                      }}
-                    />
-                  )}
-                  <Card.Title
-                    title={item.name}
-                    titleStyle={{ color: theme.colors.onSurface }}
-                    subtitleStyle={{ color: theme.colors.onSurface + "99" }}
-                    subtitle={`${item.address || ""} • ⭐${
-                      item.rating || "N/A"
-                    }`}
-                  />
-                  <Card.Actions>
-                    <Button
-                      onPress={() => openDetails(item.id)}
-                      textColor={theme.colors.primary}
-                    >
-                      View Details
-                    </Button>
-                  </Card.Actions>
-                </Card>
-              )}
+              inputStyle={{ fontSize: 15, color: theme.colors.onSurface }}
+              iconColor={theme.colors.primary}
+              placeholderTextColor={theme.colors.onSurface + "88"}
             />
-          </Animated.View>
-        )}
-      </ScrollView>
+          </View>
+          <Appbar.Action
+            icon="microphone"
+            onPress={() => {}}
+            color={theme.colors.primary}
+          />
+        </Appbar.Header>
 
-      <RestaurantDetailModal
-        visible={modalVisible}
-        onDismiss={() => setModalVisible(false)}
-        restaurant={selectedRestaurant}
-      />
-    </KeyboardAvoidingView>
+        {/* Chips row always visible */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipContainer}
+        >
+          {CATEGORY_OPTIONS.map((opt) => {
+            const isSelected = selectedCategory === opt.value;
+            return (
+              <Chip
+                compact
+                key={opt.value}
+                onPress={() => handleCategorySelect(opt.value)}
+                selected={isSelected}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor: isSelected
+                      ? theme.colors.secondary
+                      : theme.colors.surface,
+                    borderColor: theme.colors.outline,
+                  },
+                ]}
+                textStyle={{
+                  color: isSelected
+                    ? theme.colors.onPrimary || "#fff"
+                    : theme.colors.onSurface,
+                }}
+                selectedColor={theme.colors.onPrimary}
+              >
+                {opt.label}
+              </Chip>
+            );
+          })}
+        </ScrollView>
+
+        {/* Main scroll area for suggestions/results/empty */}
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 20 }}
+        >
+          {showEmptyState && (
+            <View style={styles.emptyState}>
+              <Text
+                style={[styles.emptyTitle, { color: theme.colors.onSurface }]}
+              >
+                Find your next favorite spot
+              </Text>
+              <Text
+                style={[
+                  styles.emptySubtitle,
+                  { color: theme.colors.onSurface + "99" },
+                ]}
+              >
+                Search by cuisine, restaurant name, or vibe.
+              </Text>
+            </View>
+          )}
+
+          {!loading &&
+            suggestions.map((s) => (
+              <Button
+                key={s.id}
+                onPress={() => openDetails(s.id)}
+                style={styles.suggestionButton}
+                textColor={theme.colors.primary}
+                contentStyle={{ justifyContent: "flex-start" }}
+              >
+                {s.name}
+              </Button>
+            ))}
+
+          {loading && (
+            <View style={{ padding: 16 }}>
+              <HomeSkeleton />
+            </View>
+          )}
+
+          {!loading && results.length > 0 && (
+            <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+              <FlatList
+                data={results}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.scrollArea}
+                renderItem={({ item }) => (
+                  <Card
+                    mode="elevated"
+                    style={[
+                      styles.card,
+                      { backgroundColor: theme.colors.surface },
+                    ]}
+                  >
+                    {item.photo && (
+                      <Card.Cover
+                        source={{ uri: item.photo }}
+                        style={{
+                          height: 160,
+                          borderTopLeftRadius: 12,
+                          borderTopRightRadius: 12,
+                        }}
+                      />
+                    )}
+                    <Card.Title
+                      title={item.name}
+                      titleStyle={{ color: theme.colors.onSurface }}
+                      subtitleStyle={{ color: theme.colors.onSurface + "99" }}
+                      subtitle={`${item.address || ""} • ⭐${
+                        item.rating || "N/A"
+                      }`}
+                    />
+                    <Card.Actions>
+                      <Button
+                        onPress={() => openDetails(item.id)}
+                        textColor={theme.colors.primary}
+                      >
+                        View Details
+                      </Button>
+                    </Card.Actions>
+                  </Card>
+                )}
+              />
+            </Animated.View>
+          )}
+        </ScrollView>
+
+        <RestaurantDetailModal
+          visible={modalVisible}
+          onDismiss={() => setModalVisible(false)}
+          restaurant={selectedRestaurant}
+        />
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

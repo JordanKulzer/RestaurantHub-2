@@ -10,6 +10,7 @@ import {
 import { Text, Card, Button, useTheme, FAB, Divider } from "react-native-paper";
 import { MaterialIcons } from "@expo/vector-icons";
 import { CreateListModal } from "../components";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const mockStarred = [
   {
@@ -101,8 +102,9 @@ export default function FavoritesScreen() {
   );
 
   return (
-    <View
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      edges={["top", "left", "right"]}
     >
       <ScrollView showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>⭐ Starred</Text>
@@ -173,12 +175,11 @@ export default function FavoritesScreen() {
           ])
         }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",

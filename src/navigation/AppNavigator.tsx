@@ -30,27 +30,19 @@ function TabNavigator() {
 
   return (
     <Tab.Navigator
-      screenOptions={({
-        route,
-      }: {
-        route: RouteProp<TabParamList, keyof TabParamList>;
-      }): BottomTabNavigationOptions => ({
-        headerShown: true,
-        headerTitleAlign: "center",
-        headerStyle: {
-          backgroundColor: theme.colors.surface,
-        },
-        headerTitleStyle: {
-          color: theme.colors.onSurface,
-        },
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        // headerTitleAlign: "center",
+        // headerStyle: { backgroundColor: theme.colors.surface },
+        headerTitleStyle: { color: theme.colors.onSurface },
         tabBarActiveTintColor: theme.colors.tertiary,
-        tabBarInactiveTintColor: theme.colors.onSurface + "99", // 60% opacity
+        tabBarInactiveTintColor: theme.colors.onSurface + "99",
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.outline,
           borderTopWidth: StyleSheet.hairlineWidth,
         },
-        tabBarIcon: ({ color, size }: { color: string; size: number }) => {
+        tabBarIcon: ({ color, size }) => {
           let icon: keyof typeof MaterialIcons.glyphMap = "restaurant-menu";
           if (route.name === "Shuffle") icon = "shuffle";
           if (route.name === "Search") icon = "search";
