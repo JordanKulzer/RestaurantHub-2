@@ -7,10 +7,19 @@ import {
   Image,
   TouchableOpacity,
 } from "react-native";
-import { Text, Card, Button, useTheme, FAB, Divider } from "react-native-paper";
-import { MaterialIcons } from "@expo/vector-icons";
-import { CreateListModal } from "../components";
+import {
+  Text,
+  Card,
+  Button,
+  useTheme,
+  FAB,
+  Divider,
+  Surface,
+  Avatar,
+  IconButton,
+} from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CreateListModal } from "../components";
 
 const mockStarred = [
   {
@@ -21,27 +30,12 @@ const mockStarred = [
   {
     id: "2",
     name: "Velvet Taco",
-    image: "https://picsum.photos/600/400?random=1",
+    image: "https://picsum.photos/600/400?random=2",
   },
   {
     id: "3",
     name: "Katy Trail Ice House",
-    image: "https://picsum.photos/600/400?random=1",
-  },
-  {
-    id: "4",
-    name: "Uchi Dallas",
-    image: "https://picsum.photos/600/400?random=1",
-  },
-  {
-    id: "5",
-    name: "Velvet Taco",
-    image: "https://picsum.photos/600/400?random=1",
-  },
-  {
-    id: "6",
-    name: "Katy Trail Ice House",
-    image: "https://picsum.photos/600/400?random=1",
+    image: "https://picsum.photos/600/400?random=3",
   },
 ];
 
@@ -50,24 +44,21 @@ const mockLists = [
     id: "a",
     title: "Date Night Spots",
     count: 4,
-    image: "https://picsum.photos/600/400?random=1",
+    image: "https://picsum.photos/600/400?random=5",
   },
   {
     id: "b",
     title: "Coffee Runs ☕",
     count: 7,
-    image: "https://picsum.photos/600/400?random=1",
+    image: "https://picsum.photos/600/400?random=6",
   },
   {
     id: "c",
     title: "Brunch Goals",
     count: 5,
-    image: "https://picsum.photos/600/400?random=1",
+    image: "https://picsum.photos/600/400?random=7",
   },
 ];
-
-// const mockStarred: any[] = []; // 👈 Simulate empty initially
-// const mockLists: any[] = []; // 👈 Simulate empty initially
 
 export default function FavoritesScreen() {
   const theme = useTheme();
@@ -78,17 +69,31 @@ export default function FavoritesScreen() {
   const renderStarred = ({ item }: any) => (
     <TouchableOpacity style={styles.starredItem}>
       <Image source={{ uri: item.image }} style={styles.starredImage} />
-      <Text style={styles.starredLabel}>{item.name}</Text>
+      <Text style={[styles.starredLabel, { color: theme.colors.onSurface }]}>
+        {item.name}
+      </Text>
     </TouchableOpacity>
   );
 
   const renderListCard = ({ item }: any) => (
-    <Card style={styles.card} mode="elevated">
+    <Card
+      style={[
+        styles.card,
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.outlineVariant,
+        },
+      ]}
+      mode="elevated"
+    >
       <View style={styles.imageWrapper}>
-        <Card.Cover source={{ uri: item.image }} />
+        <Card.Cover source={{ uri: item.image }} style={{ height: 120 }} />
       </View>
       <Card.Content style={{ paddingVertical: 8 }}>
-        <Text variant="titleMedium" style={{ fontWeight: "600" }}>
+        <Text
+          variant="titleMedium"
+          style={{ fontWeight: "600", color: theme.colors.onSurface }}
+        >
           {item.title}
         </Text>
         <Text
@@ -106,14 +111,43 @@ export default function FavoritesScreen() {
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       edges={["top", "left", "right"]}
     >
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>⭐ Starred</Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <Text style={[styles.screenTitle, { color: theme.colors.primary }]}>
+            My Favorites
+          </Text>
+          <IconButton
+            icon="account-circle"
+            size={26}
+            iconColor={theme.colors.tertiary}
+            onPress={() => console.log("Open account section")}
+          />
+        </View>
+
+        {/* Starred Section */}
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+          ⭐ Starred
+        </Text>
         {starred.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
+          <Surface
+            style={[
+              styles.emptySurface,
+              { backgroundColor: theme.colors.surfaceVariant },
+            ]}
+          >
+            <Text
+              style={[
+                styles.emptyText,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
               You haven’t starred any restaurants yet.
             </Text>
-          </View>
+          </Surface>
         ) : (
           <FlatList
             data={starred}
@@ -121,23 +155,39 @@ export default function FavoritesScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderStarred}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16 }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
           />
         )}
 
-        <Divider style={{ marginVertical: 16 }} />
+        <Divider style={{ marginVertical: 20, opacity: 0.3 }} />
 
-        <Text style={styles.sectionTitle}>📋 Your Lists</Text>
+        {/* Lists Section */}
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+          📋 Your Lists
+        </Text>
         {lists.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No lists created yet.</Text>
+          <Surface
+            style={[
+              styles.emptySurface,
+              { backgroundColor: theme.colors.surfaceVariant },
+            ]}
+          >
+            <Text
+              style={[
+                styles.emptyText,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              No lists created yet.
+            </Text>
             <Button
               mode="contained-tonal"
               onPress={() => setShowCreateModal(true)}
+              textColor={theme.colors.onSecondaryContainer}
             >
               Create Your First List
             </Button>
-          </View>
+          </Surface>
         ) : (
           <FlatList
             data={lists}
@@ -151,15 +201,67 @@ export default function FavoritesScreen() {
             }}
           />
         )}
+
+        {/* Account Info Section */}
+        <Divider style={{ marginVertical: 20, opacity: 0.3 }} />
+        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+          👤 Account
+        </Text>
+        <Surface
+          style={[
+            styles.accountCard,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.outlineVariant,
+            },
+          ]}
+          mode="flat"
+        >
+          <View style={styles.accountRow}>
+            <Avatar.Icon
+              size={50}
+              icon="account"
+              color="white"
+              style={{ backgroundColor: theme.colors.tertiary }}
+            />
+            <View style={{ marginLeft: 12 }}>
+              <Text
+                style={{ fontWeight: "600", color: theme.colors.onSurface }}
+              >
+                Jordan Kulzer
+              </Text>
+              <Text style={{ color: theme.colors.onSurfaceVariant }}>
+                View and manage profile
+              </Text>
+            </View>
+          </View>
+          <Button
+            icon="logout"
+            mode="outlined"
+            textColor={theme.colors.tertiary}
+            style={{ marginTop: 10, borderColor: theme.colors.tertiary }}
+            onPress={() => console.log("Logout pressed")}
+          >
+            Log Out
+          </Button>
+        </Surface>
       </ScrollView>
 
+      {/* Floating Button */}
       <FAB
         icon="plus"
-        style={styles.fab}
         label="New List"
-        onPress={() => setShowCreateModal(true)}
+        style={[
+          styles.fab,
+          {
+            backgroundColor: theme.colors.tertiary,
+            shadowColor: theme.colors.tertiary,
+          },
+        ]}
         color="white"
+        onPress={() => setShowCreateModal(true)}
       />
+
       <CreateListModal
         visible={showCreateModal}
         onDismiss={() => setShowCreateModal(false)}
@@ -180,12 +282,23 @@ export default function FavoritesScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  screenTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+  },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
     marginLeft: 16,
+    marginTop: 20,
     marginBottom: 8,
-    marginTop: 16,
   },
   starredItem: {
     marginRight: 12,
@@ -205,29 +318,38 @@ const styles = StyleSheet.create({
   card: {
     width: "47%",
     marginBottom: 16,
-    borderRadius: 12,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   imageWrapper: {
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
     overflow: "hidden",
+  },
+  emptySurface: {
+    marginHorizontal: 16,
+    borderRadius: 14,
+    padding: 20,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 15,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  accountCard: {
+    marginHorizontal: 16,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  accountRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   fab: {
     position: "absolute",
     right: 20,
     bottom: 20,
-    backgroundColor: "#5e60ce",
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-    marginTop: 16,
-  },
-  emptyText: {
-    fontSize: 16,
-    textAlign: "center",
-    marginVertical: 12,
-    opacity: 0.8,
   },
 });

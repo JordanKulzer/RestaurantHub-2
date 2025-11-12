@@ -4,4 +4,4 @@ export { default as RestaurantDetailModal } from "./RestaurantDetailModal";
 export { default as CreateListModal } from "./CreateListModal";
 export { default as RestaurantOptionsMenu } from "./RestaurantOptionsMenu";
 export { default as HomeSwipeCard } from "./HomeSwipeCard";
-export { default as AddToListModal } from "./AddToListModal";
+export { default as AddToListMenu } from "./AddToListMenu";

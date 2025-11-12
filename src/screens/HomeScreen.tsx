@@ -29,7 +29,8 @@ import HomeSkeleton from "../components/HomeSkeleton";
 import {
   RestaurantDetailModal,
   HomeSwipeCard,
-  AddToListModal,
+  AddToListMenu,
+  RestaurantOptionsMenu,
 } from "../components";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -74,20 +75,24 @@ export default function HomeScreen() {
   const [ratingFilter, setRatingFilter] = useState<string>("all");
   const [distanceFilter, setDistanceFilter] = useState<string>("any");
   const [allSwiped, setAllSwiped] = useState(false);
-
+  const [addMenuVisible, setAddMenuVisible] = useState(false);
   const swiperRef = useRef<Swiper<Restaurant>>(null);
   const [lastSwipedIndex, setLastSwipedIndex] = useState<number | null>(null);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(
+    null
+  );
 
-  const animateFilterToggle = () => {
-    Animated.spring(slideAnim, {
-      toValue: showChips ? 0 : 1,
-      friction: 6,
-      tension: 80,
-      useNativeDriver: false,
+  const animateFadeIn = () => {
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 700, // ⬆️ slightly longer for smoother transition
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1), // smoother easing curve
+      useNativeDriver: true,
     }).start();
-    setShowChips(!showChips);
   };
 
   const loadRestaurants = async () => {
@@ -95,6 +100,7 @@ export default function HomeScreen() {
       setLoading(true);
       setAllSwiped(false);
       setCurrentCardIndex(0);
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         console.warn("⚠️ Location permission not granted");
@@ -103,12 +109,14 @@ export default function HomeScreen() {
       }
       const { coords } = await Location.getCurrentPositionAsync({});
       const { latitude, longitude } = coords;
-      const searchTerm = filters.length > 0 ? filters.join(" ") : "restaurants";
+
       const results = await fetchYelpRestaurants(
         latitude,
         longitude,
-        searchTerm
+        "restaurants",
+        filters
       );
+
       const filtered = results.filter((r: Restaurant) => {
         const meetsRating =
           ratingFilter === "all" || (r.rating ?? 0) >= parseFloat(ratingFilter);
@@ -118,6 +126,7 @@ export default function HomeScreen() {
         return meetsRating && meetsDistance;
       });
       setRestaurants(filtered.sort(() => Math.random() - 0.5));
+      animateFadeIn();
     } catch (err) {
       console.error("❌ Error fetching Yelp restaurants:", err);
     } finally {
@@ -144,168 +153,175 @@ export default function HomeScreen() {
           { backgroundColor: theme.colors.surface },
         ]}
       >
-        <Text style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
-          {type === "category"
-            ? "Select Categories"
-            : type === "rating"
-            ? "Select Rating"
-            : type === "location"
-            ? "Choose Location"
-            : "Select Distance"}
-        </Text>
-
-        {type === "category" && (
-          <View style={styles.chipGrid}>
-            {CATEGORY_OPTIONS.slice(0, 12).map((opt) => {
-              const selected = filters.includes(opt.value);
-              return (
-                <Chip
-                  key={opt.value}
-                  mode={selected ? "flat" : "outlined"}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: selected
-                        ? theme.colors.primary
-                        : "transparent",
-                    },
-                  ]}
-                  textStyle={{
-                    color: selected ? "#fff" : theme.colors.onSurfaceVariant,
-                    fontWeight: "500",
-                  }}
-                  onPress={() =>
-                    setFilters((prev) =>
-                      prev.includes(opt.value)
-                        ? prev.filter((v) => v !== opt.value)
-                        : [...prev, opt.value]
-                    )
-                  }
-                >
-                  {opt.label}
-                </Chip>
-              );
-            })}
-          </View>
-        )}
-
-        {type === "rating" && (
-          <View style={styles.chipRow}>
-            {[
-              { label: "All", value: "all" },
-              { label: "3★+", value: "3" },
-              { label: "3.5★+", value: "3.5" },
-              { label: "4★+", value: "4" },
-              { label: "4.5★+", value: "4.5" },
-            ].map((opt) => {
-              const selected = ratingFilter === opt.value;
-              return (
-                <Chip
-                  key={opt.value}
-                  mode={selected ? "flat" : "outlined"}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: selected
-                        ? theme.colors.primary
-                        : "transparent",
-                    },
-                  ]}
-                  textStyle={{
-                    color: selected ? "#fff" : theme.colors.onSurfaceVariant,
-                    fontWeight: "500",
-                  }}
-                  onPress={() => setRatingFilter(opt.value)}
-                >
-                  {opt.label}
-                </Chip>
-              );
-            })}
-          </View>
-        )}
-
-        {type === "distance" && (
-          <View style={styles.chipRow}>
-            {[
-              { label: "Any", value: "any" },
-              { label: "≤1 mi", value: "1" },
-              { label: "≤3 mi", value: "3" },
-              { label: "≤5 mi", value: "5" },
-            ].map((opt) => {
-              const selected = distanceFilter === opt.value;
-              return (
-                <Chip
-                  key={opt.value}
-                  mode={selected ? "flat" : "outlined"}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: selected
-                        ? theme.colors.primary
-                        : "transparent",
-                    },
-                  ]}
-                  textStyle={{
-                    color: selected ? "#fff" : theme.colors.onSurfaceVariant,
-                    fontWeight: "500",
-                  }}
-                  onPress={() => setDistanceFilter(opt.value)}
-                >
-                  {opt.label}
-                </Chip>
-              );
-            })}
-          </View>
-        )}
-
-        {type === "location" && (
-          <View
-            style={{
-              height: 160,
-              backgroundColor: theme.colors.surfaceVariant,
-              borderRadius: 12,
-              justifyContent: "center",
-              alignItems: "center",
-              marginBottom: 16,
-            }}
-          >
-            <Icon name="map-marker" size={48} color={theme.colors.primary} />
+        <View
+          style={{
+            maxHeight: 500,
+            borderTopLeftRadius: 22,
+            borderTopRightRadius: 22,
+          }}
+        >
+          <View style={styles.modalHeader}>
+            <View style={styles.modalHandle} />
             <Text
-              style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}
+              style={[styles.modalTitle, { color: theme.colors.onSurface }]}
             >
-              Drop a pin here (placeholder)
+              {type === "category"
+                ? "Select Categories"
+                : type === "rating"
+                ? "Select Rating"
+                : type === "location"
+                ? "Choose Location"
+                : "Select Distance"}
             </Text>
           </View>
-        )}
 
-        <View style={styles.modalButtons}>
-          <Button
-            mode="contained"
-            onPress={async () => {
-              setActiveModal(null);
-              await loadRestaurants();
-            }}
-            buttonColor={theme.colors.secondary}
-            textColor="#fff"
-            style={{ borderRadius: 25, flex: 1, marginRight: 8 }}
+          <ScrollView
+            showsVerticalScrollIndicator
+            contentContainerStyle={[
+              styles.modalScrollContent,
+              { paddingBottom: 24 },
+            ]}
+            style={{ maxHeight: 360 }} // gives space for footer, keeps it visible
           >
-            Apply
-          </Button>
-          <Button
-            mode="outlined"
-            onPress={() => {
-              if (type === "category") setFilters([]);
-              else if (type === "rating") setRatingFilter("all");
-              else if (type === "distance") setDistanceFilter("any");
-              else if (type === "location") {
-                console.log("Location filter cleared");
-              }
-            }}
-            textColor={theme.colors.onSurface}
-            style={{ borderRadius: 25, flex: 1 }}
-          >
-            Clear
-          </Button>
+            {type === "category" && (
+              <View style={styles.chipGrid}>
+                {CATEGORY_OPTIONS.map((opt) => {
+                  const selected = filters.includes(opt.value);
+                  return (
+                    <Chip
+                      key={opt.value}
+                      mode={selected ? "flat" : "outlined"}
+                      style={[
+                        styles.chip,
+                        {
+                          backgroundColor: selected
+                            ? theme.colors.primary
+                            : "transparent",
+                        },
+                      ]}
+                      textStyle={{
+                        color: selected
+                          ? "#fff"
+                          : theme.colors.onSurfaceVariant,
+                        fontWeight: "500",
+                      }}
+                      onPress={() =>
+                        setFilters((prev) =>
+                          prev.includes(opt.value)
+                            ? prev.filter((v) => v !== opt.value)
+                            : [...prev, opt.value]
+                        )
+                      }
+                    >
+                      {opt.label}
+                    </Chip>
+                  );
+                })}
+              </View>
+            )}
+
+            {type === "rating" && (
+              <View style={styles.chipRow}>
+                {[
+                  { label: "Any", value: "all" },
+                  { label: "3★+", value: "3" },
+                  { label: "3.5★+", value: "3.5" },
+                  { label: "4★+", value: "4" },
+                  { label: "4.5★+", value: "4.5" },
+                ].map((opt) => {
+                  const selected = ratingFilter === opt.value;
+                  return (
+                    <Chip
+                      key={opt.value}
+                      mode={selected ? "flat" : "outlined"}
+                      style={[
+                        styles.chip,
+                        {
+                          backgroundColor: selected
+                            ? theme.colors.primary
+                            : "transparent",
+                        },
+                      ]}
+                      textStyle={{
+                        color: selected
+                          ? "#fff"
+                          : theme.colors.onSurfaceVariant,
+                        fontWeight: "500",
+                      }}
+                      onPress={() => setRatingFilter(opt.value)}
+                    >
+                      {opt.label}
+                    </Chip>
+                  );
+                })}
+              </View>
+            )}
+
+            {type === "distance" && (
+              <View style={styles.chipRow}>
+                {[
+                  { label: "Any", value: "any" },
+                  { label: "≤1 mi", value: "1" },
+                  { label: "≤3 mi", value: "3" },
+                  { label: "≤5 mi", value: "5" },
+                ].map((opt) => {
+                  const selected = distanceFilter === opt.value;
+                  return (
+                    <Chip
+                      key={opt.value}
+                      mode={selected ? "flat" : "outlined"}
+                      style={[
+                        styles.chip,
+                        {
+                          backgroundColor: selected
+                            ? theme.colors.primary
+                            : "transparent",
+                        },
+                      ]}
+                      textStyle={{
+                        color: selected
+                          ? "#fff"
+                          : theme.colors.onSurfaceVariant,
+                        fontWeight: "500",
+                      }}
+                      onPress={() => setDistanceFilter(opt.value)}
+                    >
+                      {opt.label}
+                    </Chip>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Footer */}
+          <View style={styles.modalFooter}>
+            <Button
+              mode="contained"
+              onPress={async () => {
+                setActiveModal(null);
+                await loadRestaurants();
+              }}
+              buttonColor={theme.colors.secondary}
+              textColor="#fff"
+              style={styles.modalBtnApply}
+            >
+              Apply
+            </Button>
+            <Button
+              mode="outlined"
+              onPress={() => {
+                if (type === "category") setFilters([]);
+                else if (type === "rating") setRatingFilter("all");
+                else if (type === "distance") setDistanceFilter("any");
+                else if (type === "location") console.log("Location cleared");
+              }}
+              textColor={theme.colors.onSurface}
+              style={styles.modalBtnClear}
+            >
+              Clear
+            </Button>
+          </View>
         </View>
       </Modal>
     </Portal>
@@ -316,7 +332,6 @@ export default function HomeScreen() {
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       edges={["top", "left", "right"]}
     >
-      {/* --- Filter Header --- */}
       <View
         style={{
           paddingHorizontal: 16,
@@ -341,12 +356,24 @@ export default function HomeScreen() {
           >
             FoodFinder
           </Text>
-          <IconButton
-            icon="plus-circle-outline"
-            size={26}
-            iconColor={theme.colors.primary}
-            onPress={() => setAddToListModalVisible(true)}
-          />
+          {currentRestaurant && (
+            <View
+            // style={{ position: "absolute", top: 20, right: 20, zIndex: 99 }}
+            >
+              <RestaurantOptionsMenu
+                restaurant={currentRestaurant}
+                isFavorite={liked.some((f) => f.id === currentRestaurant.id)}
+                onToggleFavorite={(r) => {
+                  setLiked((prev) =>
+                    prev.some((f) => f.id === r.id)
+                      ? prev.filter((f) => f.id !== r.id)
+                      : [...prev, r]
+                  );
+                }}
+                onCreateNewList={() => console.log("🆕 Create new list")}
+              />
+            </View>
+          )}
         </View>
 
         <ScrollView
@@ -354,62 +381,107 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipScroll}
         >
-          {["Category", "Rating", "Location", "Distance"].map((label) => {
-            const isActive =
-              (label === "Category" && filters.length > 0) ||
-              (label === "Rating" && ratingFilter !== "all") ||
-              (label === "Distance" && distanceFilter !== "any") ||
-              (label === "Location" && activeModal === "location");
+          {["Clear Filters", "Category", "Rating", "Location", "Distance"].map(
+            (label) => {
+              const isActive =
+                (label === "Category" && filters.length > 0) ||
+                (label === "Rating" && ratingFilter !== "all") ||
+                (label === "Distance" && distanceFilter !== "any") ||
+                (label === "Location" && activeModal === "location");
 
-            const backgroundColor = isActive
-              ? theme.colors.primary
-              : "transparent";
-            const textColor = isActive ? "#fff" : theme.colors.primary;
+              const backgroundColor =
+                label === "Clear Filters"
+                  ? theme.colors.errorContainer || "#fce4e4"
+                  : isActive
+                  ? theme.colors.primary
+                  : "transparent";
 
-            return (
-              <Chip
-                key={label}
-                mode="outlined"
-                style={[
-                  styles.chip,
-                  {
-                    borderColor: theme.colors.primary,
-                    backgroundColor,
-                    marginRight: 8,
-                  },
-                ]}
-                textStyle={{
-                  color: textColor,
-                  fontWeight: "600",
-                }}
-                onPress={() => setActiveModal(label.toLowerCase() as any)}
-              >
-                {label}
-              </Chip>
-            );
-          })}
+              const textColor =
+                label === "Clear Filters"
+                  ? theme.colors.error || "#b00020"
+                  : isActive
+                  ? "#fff"
+                  : theme.colors.primary;
+
+              const handlePress = async () => {
+                if (label === "Clear Filters") {
+                  setFilters([]);
+                  setRatingFilter("all");
+                  setDistanceFilter("any");
+                  setActiveModal(null);
+                  await loadRestaurants();
+                  return;
+                }
+                setActiveModal(label.toLowerCase() as any);
+              };
+
+              return (
+                <Chip
+                  key={label}
+                  mode="outlined"
+                  style={[
+                    styles.chip,
+                    {
+                      borderColor: theme.colors.primary,
+                      backgroundColor,
+                      marginRight: 8,
+                    },
+                  ]}
+                  textStyle={{
+                    color: textColor,
+                    fontWeight: "600",
+                  }}
+                  onPress={handlePress}
+                >
+                  {label}
+                </Chip>
+              );
+            }
+          )}
         </ScrollView>
       </View>
 
-      <View style={{ flex: 1, marginTop: 10, marginBottom: 120 }}>
+      <Animated.View
+        style={{
+          flex: 1,
+          marginTop: 10,
+          marginBottom: 120,
+          opacity: fadeAnim,
+          transform: [
+            {
+              scale: fadeAnim.interpolate({
+                inputRange: [0, 0.6, 1],
+                outputRange: [0.96, 0.985, 1],
+              }),
+            },
+          ],
+        }}
+      >
         <Swiper
           ref={swiperRef}
           cards={restaurants}
-          renderCard={(r) =>
-            r ? (
+          renderCard={(r, index) => {
+            return r ? (
               <HomeSwipeCard
-                key={`card-${r.id}-${currentCardIndex}`}
+                key={r.id}
                 restaurant={r}
                 onLike={() => swiperRef.current?.swipeRight()}
                 onDislike={() => swiperRef.current?.swipeLeft()}
                 onUndo={() => swiperRef.current?.swipeBack()}
               />
-            ) : null
-          }
+            ) : null;
+          }}
           onSwiped={(index) => {
+            setCurrentRestaurant(restaurants[index + 1] ?? null);
             setCurrentCardIndex(index + 1);
           }}
-          onSwipedAll={() => setAllSwiped(true)}
+          onSwipedAll={() => {
+            setCurrentRestaurant(null);
+            setAllSwiped(true);
+          }}
+          onSwipedAborted={() =>
+            setCurrentRestaurant(restaurants[currentCardIndex])
+          }
           backgroundColor="transparent"
           stackSize={2}
           verticalSwipe={false}
@@ -418,9 +490,8 @@ export default function HomeScreen() {
           containerStyle={{ flex: 1 }}
           cardStyle={{ height: "100%" }}
         />
-      </View>
+      </Animated.View>
 
-      {/* --- Modals --- */}
       {renderModal("category")}
       {renderModal("rating")}
       {renderModal("location")}
@@ -430,27 +501,23 @@ export default function HomeScreen() {
         onDismiss={() => setShowDetails(false)}
         restaurant={selectedRestaurant}
       />
-
-      <AddToListModal
-        visible={addToListModalVisible}
-        onDismiss={() => setAddToListModalVisible(false)}
-        restaurant={selectedRestaurant}
-        onAddToLiked={(r) => {
-          setLiked((prev) => [...prev, r]);
-          console.log("✅ Added to liked:", r.name);
-        }}
-        onAddToExistingList={(r) => {
-          console.log("🗂️ Add to existing list:", r.name);
-        }}
-        onCreateNewList={(r) => {
-          console.log("🆕 Create new list with:", r.name);
-        }}
-      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  chipScrollContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    paddingBottom: 80, // extra space so last chips aren't hidden behind buttons
+  },
+  modalButtonsSticky: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+  },
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -477,19 +544,53 @@ const styles = StyleSheet.create({
   modalContainer: {
     marginTop: "auto",
     marginHorizontal: 10,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    overflow: "hidden",
+    paddingBottom: 0,
+  },
+  modalInner: {
+    flexGrow: 1,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+  },
+  modalHeader: {
+    alignItems: "center",
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#ccc",
+    marginBottom: 8,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
-    marginBottom: 10,
   },
-  modalButtons: {
+  modalScrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  modalFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#ccc",
+    backgroundColor: "white",
+  },
+  modalBtnApply: {
+    borderRadius: 25,
+    flex: 1,
+    marginRight: 8,
+  },
+  modalBtnClear: {
+    borderRadius: 25,
+    flex: 1,
   },
 });

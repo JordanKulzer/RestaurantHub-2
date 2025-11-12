@@ -73,16 +73,37 @@ export default function HomeSwipeCard({
   useEffect(() => {
     let mounted = true;
     const loadDetails = async () => {
+      console.log(`🟢 [${restaurant.name}] Fetching details...`);
+      const start = Date.now();
       try {
         const details = await fetchYelpDetails(restaurant.id);
+        const duration = Date.now() - start;
+        console.log(`✅ [${restaurant.name}] Details fetched in ${duration}ms`);
         if (!mounted) return;
 
-        if (details?.photos?.length > 1) setPhotos(details.photos);
+        console.log(
+          `📸 [${restaurant.name}] Received ${
+            details?.photos?.length || 0
+          } photos`
+        );
+        console.log(`🖼️ Current displayed: ${photos[0]}`);
+        console.log(`🆕 New first photo: ${details?.photos?.[0]}`);
+
+        if (details?.photos?.length > 1) {
+          await Promise.all(
+            details.photos.map((uri: string) => Image.prefetch(uri))
+          );
+          console.log(
+            `✅ [${restaurant.name}] Prefetched all ${details.photos.length} photos`
+          );
+          setPhotos(details.photos);
+          console.log(`🔁 [${restaurant.name}] Updated photos state`);
+        }
         if (details?.hours) setHours(details.hours);
         if (typeof details?.isOpen === "boolean") setIsOpen(details.isOpen);
         setHasLoadedDetails(true);
       } catch (err) {
-        console.warn("⚠️ Prefetch failed:", err);
+        console.warn(`⚠️ [${restaurant.name}] Prefetch failed:`, err);
       }
     };
     loadDetails();
@@ -401,8 +422,13 @@ export default function HomeSwipeCard({
 }
 
 const styles = StyleSheet.create({
-  card: { flex: 1, borderRadius: 0 },
-  carouselImage: { width: "100%", height: 240 },
+  card: {
+    flex: 1,
+    borderRadius: 0,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+  },
+  carouselImage: { width: "100%", height: 240, borderRadius: 10 },
   infoSection: { padding: 16 },
   name: { fontSize: 22, fontWeight: "700", marginBottom: 4 },
   categories: { fontSize: 14, marginBottom: 6 },

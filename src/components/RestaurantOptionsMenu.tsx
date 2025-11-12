@@ -1,23 +1,42 @@
-import React, { useState } from "react";
-import { Share } from "react-native";
-import { Menu, IconButton } from "react-native-paper";
+import React, { useEffect, useState } from "react";
+import { Share, View } from "react-native";
+import {
+  Menu,
+  IconButton,
+  Divider,
+  Text,
+  useTheme,
+  Icon,
+} from "react-native-paper";
+import { getLists, addToList, SavedList } from "../utils/tempListStorage";
 
 interface Props {
   restaurant: any;
   isFavorite: boolean;
   onToggleFavorite: (r: any) => void;
-  onAddToList: (r: any) => void;
+  onCreateNewList: () => void;
 }
 
-function RestaurantOptionsMenu({
+export default function RestaurantOptionsMenu({
   restaurant,
   isFavorite,
   onToggleFavorite,
-  onAddToList,
+  onCreateNewList,
 }: Props) {
+  const theme = useTheme();
   const [visible, setVisible] = useState(false);
-  const openMenu = () => setVisible(true);
+  const [lists, setLists] = useState<SavedList[]>([]);
+
+  const openMenu = async () => {
+    await loadLists();
+    setVisible(true);
+  };
   const closeMenu = () => setVisible(false);
+
+  const loadLists = async () => {
+    const data = await getLists();
+    setLists(data);
+  };
 
   const handleShare = async () => {
     closeMenu();
@@ -31,6 +50,16 @@ function RestaurantOptionsMenu({
       console.error("❌ Share failed:", error);
     }
   };
+
+  const handleAddToList = async (listId: string) => {
+    await addToList(listId, restaurant);
+    closeMenu();
+  };
+
+  const renderIcon = (name: string) => (
+    <Icon source={name} color={theme.colors.tertiary} size={20} />
+  );
+
   return (
     <Menu
       key={visible ? "open" : "closed"}
@@ -38,39 +67,122 @@ function RestaurantOptionsMenu({
       onDismiss={closeMenu}
       anchor={
         <IconButton
-          icon="dots-vertical"
-          size={22}
+          icon="plus-circle-outline"
+          size={26}
+          iconColor={theme.colors.tertiary}
           onPress={openMenu}
-          accessibilityLabel="Restaurant options"
+          style={{
+            borderRadius: 50,
+            elevation: 2,
+          }}
         />
       }
+      contentStyle={{
+        backgroundColor: theme.colors.surface,
+        borderRadius: 16,
+        paddingVertical: 4,
+        shadowColor: "#000",
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 5,
+        width: 220,
+      }}
       anchorPosition="bottom"
     >
+      {/* Section Header */}
+      <View style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
+        <Text
+          style={{
+            color: theme.colors.tertiary,
+            fontWeight: "600",
+            fontSize: 13,
+          }}
+        >
+          Quick Actions
+        </Text>
+      </View>
+
+      {/* ❤️ Add / Remove from Favorites */}
       <Menu.Item
         onPress={() => {
-          closeMenu();
+          // closeMenu();
           onToggleFavorite(restaurant);
         }}
         title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-        leadingIcon={isFavorite ? "heart" : "heart-outline"}
+        leadingIcon={() => renderIcon(isFavorite ? "heart" : "heart-outline")}
+        titleStyle={{ color: theme.colors.tertiary }}
+        rippleColor={theme.colors.tertiary + "22"}
       />
 
+      <Divider
+        style={{ backgroundColor: theme.colors.outlineVariant, opacity: 0.5 }}
+      />
+
+      {/* ➕ Create New List */}
       <Menu.Item
         onPress={() => {
           closeMenu();
-          onAddToList(restaurant);
+          onCreateNewList();
         }}
-        title="Add to List"
-        leadingIcon="playlist-plus"
+        title="Create New List"
+        leadingIcon={() => renderIcon("plus")}
+        titleStyle={{ color: theme.colors.tertiary }}
+        rippleColor={theme.colors.tertiary + "22"}
       />
 
+      {/* 🗂️ User Lists */}
+      {lists.length > 0 ? (
+        <>
+          <Divider
+            style={{
+              backgroundColor: theme.colors.outlineVariant,
+              opacity: 0.5,
+            }}
+          />
+          <View style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
+            <Text
+              style={{
+                color: theme.colors.tertiary,
+                fontWeight: "600",
+                fontSize: 13,
+              }}
+            >
+              Your Lists
+            </Text>
+          </View>
+          {lists.map((l) => (
+            <Menu.Item
+              key={l.id}
+              onPress={() => handleAddToList(l.id)}
+              title={`Add to ${l.name}`}
+              leadingIcon={() => renderIcon("playlist-plus")}
+              titleStyle={{ color: theme.colors.tertiary }}
+              rippleColor={theme.colors.tertiary + "22"}
+            />
+          ))}
+        </>
+      ) : (
+        <Menu.Item
+          title="No lists available"
+          disabled
+          titleStyle={{ color: theme.colors.tertiary + "88" }}
+          leadingIcon={() => renderIcon("alert-circle-outline")}
+        />
+      )}
+
+      <Divider
+        style={{ backgroundColor: theme.colors.outlineVariant, opacity: 0.5 }}
+      />
+
+      {/* 📤 Share */}
       <Menu.Item
         onPress={handleShare}
         title="Share"
-        leadingIcon="share-variant"
+        leadingIcon={() => renderIcon("share-variant")}
+        titleStyle={{ color: theme.colors.tertiary }}
+        rippleColor={theme.colors.tertiary + "22"}
       />
     </Menu>
   );
 }
-
-export default RestaurantOptionsMenu;
