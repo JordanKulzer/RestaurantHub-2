@@ -1,6 +1,6 @@
 // src/components/CreateListModal.tsx
 import React, { useState } from "react";
-import { View, Image, StyleSheet, TouchableOpacity } from "react-native";
+import { View, StyleSheet } from "react-native";
 import {
   Modal,
   Portal,
@@ -9,61 +9,61 @@ import {
   TextInput,
   useTheme,
 } from "react-native-paper";
-import * as ImagePicker from "expo-image-picker";
+import { createList } from "../utils/listsApi";
 
 interface Props {
   visible: boolean;
   onDismiss: () => void;
-  onCreate: (list: { name: string; photoUri?: string | null }) => void;
+  /** Called after a list is successfully created so parent can reload */
+  onCreated: () => void;
 }
 
 export default function CreateListModal({
   visible,
   onDismiss,
-  onCreate,
+  onCreated,
 }: Props) {
-  const { colors } = useTheme();
+  const theme = useTheme();
   const [name, setName] = useState("");
-  const [photo, setPhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
-    if (!result.canceled) {
-      setPhoto(result.assets[0].uri);
+  const handleCreate = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || loading) return;
+
+    try {
+      setLoading(true);
+      await createList(trimmed);
+      setName("");
+      onCreated();
+      onDismiss();
+    } catch (err) {
+      console.error("❌ CreateListModal: failed to create list:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCreate = async () => {
-    if (!name.trim()) return;
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 600)); // simulate save delay
-    onCreate({ name: name.trim(), photoUri: photo });
-    setName("");
-    setPhoto(null);
-    setLoading(false);
-    onDismiss();
+  const handleClose = () => {
+    if (!loading) {
+      setName("");
+      onDismiss();
+    }
   };
 
   return (
     <Portal>
       <Modal
         visible={visible}
-        onDismiss={onDismiss}
-        contentContainerStyle={styles.modal}
+        onDismiss={handleClose}
+        contentContainerStyle={[
+          styles.modal,
+          { backgroundColor: theme.colors.surface },
+        ]}
       >
-        <Text style={styles.header}>Create New List</Text>
-
-        <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
-          {photo ? (
-            <Image source={{ uri: photo }} style={styles.imagePreview} />
-          ) : (
-            <Text style={{ color: colors.primary }}>+ Add Photo</Text>
-          )}
-        </TouchableOpacity>
+        <Text style={[styles.header, { color: theme.colors.onSurface }]}>
+          Create New List
+        </Text>
 
         <TextInput
           label="List Name"
@@ -73,15 +73,24 @@ export default function CreateListModal({
           style={styles.input}
         />
 
-        <Button
-          mode="contained"
-          onPress={handleCreate}
-          disabled={!name.trim() || loading}
-          loading={loading}
-          style={styles.createButton}
-        >
-          Create List
-        </Button>
+        <View style={styles.buttonRow}>
+          <Button
+            mode="text"
+            onPress={handleClose}
+            disabled={loading}
+            textColor={theme.colors.onSurfaceVariant}
+          >
+            Cancel
+          </Button>
+          <Button
+            mode="contained"
+            onPress={handleCreate}
+            disabled={!name.trim() || loading}
+            loading={loading}
+          >
+            Create
+          </Button>
+        </View>
       </Modal>
     </Portal>
   );
@@ -89,7 +98,6 @@ export default function CreateListModal({
 
 const styles = StyleSheet.create({
   modal: {
-    backgroundColor: "white",
     margin: 20,
     borderRadius: 16,
     padding: 20,
@@ -100,17 +108,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
   },
-  imagePicker: {
-    alignItems: "center",
-    justifyContent: "center",
-    height: 150,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 12,
+  input: {
     marginBottom: 16,
-    overflow: "hidden",
   },
-  imagePreview: { width: "100%", height: "100%", resizeMode: "cover" },
-  input: { marginBottom: 16 },
-  createButton: { marginTop: 4 },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
 });

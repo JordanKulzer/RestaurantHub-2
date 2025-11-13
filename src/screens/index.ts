@@ -1,5 +1,10 @@
-export { default as FavoritesScreen } from "./FavoritesScreen";
+export { default as FavoritesScreen } from "./AccountScreen";
 export { default as HomeScreen } from "./HomeScreen";
 export { default as ShuffleScreen } from "./ShuffleScreen";
 export { default as ProfileScreen } from "./ProfileScreen";
 export { default as SearchScreen } from "./SearchScreen";
+export { default as LoginScreen } from "./LoginScreen";
+export { default as SignupScreen } from "./SignupScreen";
+export { default as ListDetailScreen } from "./ListDetailScreen";
+export { default as AccountScreen } from "./AccountScreen";
+export { default as RestaurantDetailScreen } from "./RestaurantDetailScreen";

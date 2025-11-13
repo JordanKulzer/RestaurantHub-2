@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+// src/screens/AccountScreen.tsx
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -19,8 +20,9 @@ import {
   IconButton,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CreateListModal } from "../components";
-import { getLists } from "../utils/listsApi";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
+import CreateListModal from "../components/CreateListModal";
+import { getLists, ListWithCount } from "../utils/listsApi";
 
 const mockStarred = [
   {
@@ -40,39 +42,32 @@ const mockStarred = [
   },
 ];
 
-const mockLists = [
-  {
-    id: "a",
-    title: "Date Night Spots",
-    count: 4,
-    image: "https://picsum.photos/600/400?random=5",
-  },
-  {
-    id: "b",
-    title: "Coffee Runs ☕",
-    count: 7,
-    image: "https://picsum.photos/600/400?random=6",
-  },
-  {
-    id: "c",
-    title: "Brunch Goals",
-    count: 5,
-    image: "https://picsum.photos/600/400?random=7",
-  },
-];
-
-export default function FavoritesScreen() {
+export default function AccountScreen() {
   const theme = useTheme();
-  const [lists, setLists] = useState<any[]>([]);
-  const [starred, setStarred] = useState(mockStarred);
+  const navigation: any = useNavigation();
+  const [lists, setLists] = useState<ListWithCount[]>([]);
+  const [starred] = useState(mockStarred);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [loadingLists, setLoadingLists] = useState(false);
+
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    const load = async () => {
+    if (isFocused) {
+      loadLists();
+    }
+  }, [isFocused]);
+
+  const loadLists = useCallback(async () => {
+    try {
+      setLoadingLists(true);
       const data = await getLists();
       setLists(data);
-    };
-    load();
+    } catch (err) {
+      console.error("❌ AccountScreen: getLists failed:", err);
+    } finally {
+      setLoadingLists(false);
+    }
   }, []);
 
   const renderStarred = ({ item }: any) => (
@@ -84,35 +79,43 @@ export default function FavoritesScreen() {
     </TouchableOpacity>
   );
 
-  const renderListCard = ({ item }: any) => (
-    <Card
-      style={[
-        styles.card,
-        {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.outlineVariant,
-        },
-      ]}
-      mode="elevated"
+  const renderListCard = ({ item }: { item: ListWithCount }) => (
+    <TouchableOpacity
+      style={{ width: "47%", marginBottom: 16 }}
+      onPress={() =>
+        navigation.navigate("ListDetail", {
+          listId: item.id,
+          title: item.title,
+        })
+      }
     >
-      <View style={styles.imageWrapper}>
-        <Card.Cover source={{ uri: item.image }} style={{ height: 120 }} />
-      </View>
-      <Card.Content style={{ paddingVertical: 8 }}>
-        <Text
-          variant="titleMedium"
-          style={{ fontWeight: "600", color: theme.colors.onSurface }}
-        >
-          {item.title}
-        </Text>
-        <Text
-          variant="bodySmall"
-          style={{ color: theme.colors.onSurfaceVariant }}
-        >
-          {item.count} places
-        </Text>
-      </Card.Content>
-    </Card>
+      <Card
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.outlineVariant,
+          },
+        ]}
+        mode="elevated"
+      >
+        <Card.Content style={{ paddingVertical: 16 }}>
+          <Text
+            variant="titleMedium"
+            style={{ fontWeight: "600", color: theme.colors.onSurface }}
+            numberOfLines={2}
+          >
+            {item.title}
+          </Text>
+          <Text
+            variant="bodySmall"
+            style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}
+          >
+            {item.placesCount} place{item.placesCount === 1 ? "" : "s"}
+          </Text>
+        </Card.Content>
+      </Card>
+    </TouchableOpacity>
   );
 
   return (
@@ -174,7 +177,23 @@ export default function FavoritesScreen() {
         <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
           📋 Your Lists
         </Text>
-        {lists.length === 0 ? (
+        {loadingLists ? (
+          <Surface
+            style={[
+              styles.emptySurface,
+              { backgroundColor: theme.colors.surfaceVariant },
+            ]}
+          >
+            <Text
+              style={[
+                styles.emptyText,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              Loading your lists...
+            </Text>
+          </Surface>
+        ) : lists.length === 0 ? (
           <Surface
             style={[
               styles.emptySurface,
@@ -274,17 +293,7 @@ export default function FavoritesScreen() {
       <CreateListModal
         visible={showCreateModal}
         onDismiss={() => setShowCreateModal(false)}
-        onCreate={(list) =>
-          setLists((prev) => [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              title: list.name,
-              count: 0,
-              image: list.photoUri ?? "https://picsum.photos/600/400?random=10",
-            },
-          ])
-        }
+        onCreated={loadLists}
       />
     </SafeAreaView>
   );
@@ -325,15 +334,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   card: {
-    width: "47%",
-    marginBottom: 16,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  imageWrapper: {
-    borderTopLeftRadius: 14,
-    borderTopRightRadius: 14,
-    overflow: "hidden",
   },
   emptySurface: {
     marginHorizontal: 16,

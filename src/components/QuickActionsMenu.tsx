@@ -24,7 +24,7 @@ type ListRow = {
   created_at: string;
 };
 
-export default function RestaurantOptionsMenu({
+export default function QuickActionsMenu({
   restaurant,
   isFavorite,
   onToggleFavorite,
@@ -34,10 +34,13 @@ export default function RestaurantOptionsMenu({
   const [visible, setVisible] = useState(false);
   const [lists, setLists] = useState<ListRow[]>([]);
 
-  const openMenu = async () => {
-    await loadLists();
-    setVisible(true);
-  };
+  useEffect(() => {
+    if (visible) {
+      loadLists();
+    }
+  }, [visible]);
+
+  const openMenu = () => setVisible(true);
   const closeMenu = () => setVisible(false);
 
   const loadLists = async () => {

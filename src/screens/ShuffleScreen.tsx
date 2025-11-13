@@ -5,7 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import {
   RestaurantDetailModal,
   DropdownModal,
-  RestaurantOptionsMenu,
+  QuickActionsMenu,
 } from "../components";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import {
@@ -155,7 +155,7 @@ export default function ShuffleScreen() {
                     title={item.name}
                     subtitle={`${item.address} • ⭐${item.rating.toFixed(1)}`}
                     right={() => (
-                      <RestaurantOptionsMenu
+                      <QuickActionsMenu
                         restaurant={item}
                         isFavorite={isFavorite}
                         onToggleFavorite={handleToggleFavorite}

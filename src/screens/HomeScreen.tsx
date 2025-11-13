@@ -29,8 +29,7 @@ import HomeSkeleton from "../components/HomeSkeleton";
 import {
   RestaurantDetailModal,
   HomeSwipeCard,
-  AddToListMenu,
-  RestaurantOptionsMenu,
+  QuickActionsMenu,
 } from "../components";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -358,10 +357,8 @@ export default function HomeScreen() {
             FoodFinder
           </Text>
           {currentRestaurant && (
-            <View
-            // style={{ position: "absolute", top: 20, right: 20, zIndex: 99 }}
-            >
-              <RestaurantOptionsMenu
+            <View>
+              <QuickActionsMenu
                 restaurant={currentRestaurant}
                 isFavorite={liked.some((f) => f.id === currentRestaurant.id)}
                 onToggleFavorite={(r) => {
