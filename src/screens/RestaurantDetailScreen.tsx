@@ -63,7 +63,6 @@ export default function RestaurantDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Top Back Button */}
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => navigation.goBack()}
