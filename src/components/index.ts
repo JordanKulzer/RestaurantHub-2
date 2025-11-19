@@ -5,3 +5,4 @@ export { default as CreateListModal } from "./CreateListModal";
 export { default as QuickActionsMenu } from "./QuickActionsMenu";
 export { default as HomeSwipeCard } from "./HomeSwipeCard";
 export { default as AddToListMenu } from "./AddToListMenu";
+export { default as UpgradeModal } from "./UpgradeModal";

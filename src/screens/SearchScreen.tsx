@@ -19,11 +19,9 @@ import {
   Chip,
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
-import {
-  fetchTextSearch,
-  fetchRestaurantDetails,
-  fetchAutocomplete,
-} from "../utils/placesApi";
+
+import { fetchTextSearch, fetchRestaurantDetails } from "../utils/placesApi"; // ⬅️ REMOVED autocomplete imports
+
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import RestaurantDetailModal from "../components/RestaurantDetailModal";
 import HomeSkeleton from "../components/HomeSkeleton";
@@ -34,8 +32,6 @@ export default function SearchScreen({ navigation }: any) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [typingTimeout, setTypingTimeout] = useState<any>(null);
   const [selectedRestaurant, setSelectedRestaurant] = useState<any>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -54,36 +50,28 @@ export default function SearchScreen({ navigation }: any) {
     }
   }, [loading, results]);
 
+  // -----------------------------------------
+  // Input Change — NO AUTOCOMPLETE
+  // -----------------------------------------
   const handleInputChange = (text: string) => {
     setQuery(text);
 
+    // Clear results when input is empty
     if (text.trim().length === 0) {
       setResults([]);
-      setSuggestions([]);
       setSelectedCategory(null);
-      return;
     }
-
-    setSelectedCategory(null);
-    if (typingTimeout) clearTimeout(typingTimeout);
-    setTypingTimeout(
-      setTimeout(async () => {
-        if (text.trim().length < 2) return setSuggestions([]);
-        try {
-          const data = await fetchAutocomplete(text);
-          setSuggestions(data);
-        } catch (err) {
-          console.error("❌ Autocomplete error:", err);
-        }
-      }, 300)
-    );
   };
 
+  // -----------------------------------------
+  // Manual Search
+  // -----------------------------------------
   const handleSearch = async (q?: string) => {
     const text = q || query;
     if (!text.trim()) return;
+
     setLoading(true);
-    setSuggestions([]);
+
     try {
       const data = await fetchTextSearch(text);
       setResults(data);
@@ -94,8 +82,12 @@ export default function SearchScreen({ navigation }: any) {
     }
   };
 
+  // -----------------------------------------
+  // Category Search
+  // -----------------------------------------
   const handleCategorySelect = async (category: string) => {
     if (selectedCategory === category) {
+      // deselect category
       setSelectedCategory(null);
       setResults([]);
       setQuery("");
@@ -104,8 +96,8 @@ export default function SearchScreen({ navigation }: any) {
 
     setSelectedCategory(category);
     setQuery(category);
-    setSuggestions([]);
     setLoading(true);
+
     try {
       const data = await fetchTextSearch(category);
       setResults(data);
@@ -116,6 +108,9 @@ export default function SearchScreen({ navigation }: any) {
     }
   };
 
+  // -----------------------------------------
+  // Open Details
+  // -----------------------------------------
   const openDetails = async (placeId: string) => {
     Keyboard.dismiss();
     try {
@@ -128,10 +123,7 @@ export default function SearchScreen({ navigation }: any) {
   };
 
   const showEmptyState =
-    !loading &&
-    results.length === 0 &&
-    suggestions.length === 0 &&
-    query.trim().length === 0;
+    !loading && results.length === 0 && query.trim().length === 0;
 
   return (
     <SafeAreaView
@@ -152,6 +144,9 @@ export default function SearchScreen({ navigation }: any) {
           style={StyleSheet.absoluteFill}
         />
 
+        {/* ----------------------------------- */}
+        {/* HEADER */}
+        {/* ----------------------------------- */}
         <Appbar.Header
           mode="small"
           elevated
@@ -170,7 +165,7 @@ export default function SearchScreen({ navigation }: any) {
           />
           <View style={styles.searchbarContainer}>
             <Searchbar
-              placeholder="Type or search with your voice"
+              placeholder="Search restaurants"
               value={query}
               onChangeText={handleInputChange}
               onSubmitEditing={() => handleSearch()}
@@ -190,7 +185,9 @@ export default function SearchScreen({ navigation }: any) {
           />
         </Appbar.Header>
 
-        {/* Chips row always visible */}
+        {/* ----------------------------------- */}
+        {/* CATEGORY CHIPS */}
+        {/* ----------------------------------- */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -226,7 +223,9 @@ export default function SearchScreen({ navigation }: any) {
           })}
         </ScrollView>
 
-        {/* Main scroll area for suggestions/results/empty */}
+        {/* ----------------------------------- */}
+        {/* MAIN RESULTS */}
+        {/* ----------------------------------- */}
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 20 }}
@@ -248,19 +247,6 @@ export default function SearchScreen({ navigation }: any) {
               </Text>
             </View>
           )}
-
-          {!loading &&
-            suggestions.map((s) => (
-              <Button
-                key={s.id}
-                onPress={() => openDetails(s.id)}
-                style={styles.suggestionButton}
-                textColor={theme.colors.primary}
-                contentStyle={{ justifyContent: "flex-start" }}
-              >
-                {s.name}
-              </Button>
-            ))}
 
           {loading && (
             <View style={{ padding: 16 }}>
@@ -388,10 +374,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
     textTransform: "capitalize",
-  },
-  suggestionButton: {
-    alignItems: "flex-start",
-    borderRadius: 0,
-    paddingVertical: 6,
   },
 });

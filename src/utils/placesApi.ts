@@ -1,8 +1,10 @@
-import * as Location from "expo-location";
-import { categoryTypeMap } from "../constants/categoryType";
+import { getCachedPlace, setCachedPlace } from "./googleCache";
+import { getLocationCached } from "./locationHelper";
 
 const GOOGLE_PLACES_BASE =
   "https://maps.googleapis.com/maps/api/place/nearbysearch/json";
+
+const DETAILS_BASE = "https://maps.googleapis.com/maps/api/place/details/json";
 
 const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_API_KEY as string;
 
@@ -12,6 +14,7 @@ export interface RestaurantResult {
   rating: number;
   address: string;
   photo?: string | null;
+  distance?: number | null;
 }
 
 // --- Shared Distance Helpers ---
@@ -35,88 +38,90 @@ function getDistanceMeters(
 
 const metersToMiles = (m: number) => m * 0.000621371;
 
-/**
- * Fetch nearby restaurants for the HomeScreen (with pagination).
- */
+// -------------------------------------------------------------
+// Convert Yelp-style category values → Google keyword filters
+// Example: "burgers,tradamerican" → ["burgers","tradamerican"]
+// -------------------------------------------------------------
+function extractKeywords(categories: string[]): string[] {
+  if (categories.length === 0) return [];
+
+  return categories.flatMap((c) =>
+    c
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+// -------------------------------------------------------------
+// Nearby Search (HomeScreen)
+// -------------------------------------------------------------
 export async function fetchNearbyRestaurants({
   radiusMeters = 5000,
-  type,
   minRating = 0,
   pageToken,
   categories = [],
 }: {
   radiusMeters?: number;
-  type?: string;
   minRating?: number;
   pageToken?: string;
   categories?: string[];
 }): Promise<{ results: RestaurantResult[]; nextToken: string | null }> {
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== "granted") throw new Error("Location permission not granted");
+  try {
+    const { latitude, longitude } = await getLocationCached();
 
-  const { coords } = await Location.getCurrentPositionAsync({});
-  const { latitude, longitude } = coords;
+    const keywords = extractKeywords(categories);
 
-  // 🧭 Determine what 'type' and 'keyword' to use
-  let matchedType: string | undefined;
-  let extraKeywords: string[] = [];
+    let params = `location=${latitude},${longitude}&radius=${radiusMeters}`;
 
-  if (categories.length > 0) {
-    const mapped = categories.map((c) => categoryTypeMap[c.toLowerCase()]);
-    const types = mapped.map((m) => m?.type).filter(Boolean) as string[];
-    const keywords = mapped.map((m) => m?.keyword).filter(Boolean) as string[];
+    if (keywords.length > 0) {
+      params += `&keyword=${encodeURIComponent(keywords.join(" "))}`;
+    }
 
-    // Use first type if consistent, otherwise no explicit type
-    const uniqueTypes = [...new Set(types)];
-    matchedType = uniqueTypes.length === 1 ? uniqueTypes[0] : undefined;
-    extraKeywords = keywords;
+    if (pageToken) {
+      params = `pagetoken=${pageToken}`;
+    }
+
+    const url = `${GOOGLE_PLACES_BASE}?${params}&key=${API_KEY}`;
+    console.log("🍽️ Fetching nearby restaurants:", url);
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const formatted =
+      data.results?.map((r: any) => {
+        const lat = r.geometry?.location?.lat;
+        const lon = r.geometry?.location?.lng;
+        let distance: number | undefined;
+
+        if (lat && lon) {
+          const meters = getDistanceMeters(latitude, longitude, lat, lon);
+          distance = metersToMiles(meters);
+        }
+
+        return {
+          id: r.place_id,
+          name: r.name,
+          rating: r.rating,
+          address: r.vicinity,
+          photo:
+            r.photos?.length > 0
+              ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
+              : null,
+          distance: distance ?? null,
+        };
+      }) ?? [];
+
+    return { results: formatted, nextToken: data.next_page_token || null };
+  } catch (error) {
+    console.error("Error fetching nearby restaurants:", error);
+    return { results: [], nextToken: null };
   }
-
-  // 🚫 Don’t default to “restaurant” — let Google decide based on category
-  let params = `location=${latitude},${longitude}&radius=${radiusMeters}`;
-
-  if (matchedType) params += `&type=${matchedType}`;
-  if (extraKeywords.length > 0)
-    params += `&keyword=${encodeURIComponent(extraKeywords.join(" "))}`;
-  if (pageToken) params = `pagetoken=${pageToken}`;
-
-  const url = `${GOOGLE_PLACES_BASE}?${params}&key=${API_KEY}`;
-  console.log("🍽️ Fetching nearby restaurants:", url);
-
-  const res = await fetch(url);
-  const data = await res.json();
-
-  const formatted =
-    data.results?.map((r: any) => {
-      const lat = r.geometry?.location?.lat;
-      const lon = r.geometry?.location?.lng;
-      let distance: number | undefined;
-
-      if (lat && lon) {
-        const meters = getDistanceMeters(latitude, longitude, lat, lon);
-        distance = metersToMiles(meters);
-      }
-
-      return {
-        id: r.place_id,
-        name: r.name,
-        rating: r.rating,
-        address: r.vicinity,
-        photo:
-          r.photos?.length > 0
-            ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
-            : null,
-        distance,
-      };
-    }) ?? [];
-
-  return { results: formatted, nextToken: data.next_page_token || null };
 }
 
-/**
- * Fetch shuffled restaurants for the ShuffleScreen.
- * Applies filters (category, rating, distance) and returns a randomized set.
- */
+// -------------------------------------------------------------
+// Shuffle / Filters → Random Google results
+// -------------------------------------------------------------
 export async function fetchShuffledRestaurants({
   distanceMiles = 5,
   minRating = 0,
@@ -129,52 +134,21 @@ export async function fetchShuffledRestaurants({
   limit?: number;
 }): Promise<RestaurantResult[]> {
   try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted")
-      throw new Error("Location permission not granted");
-
-    const position = await Location.getCurrentPositionAsync({})?.catch(
-      () => null
-    );
-    const latitude = position?.coords?.latitude;
-    const longitude = position?.coords?.longitude;
-
-    if (
-      typeof latitude !== "number" ||
-      typeof longitude !== "number" ||
-      isNaN(latitude) ||
-      isNaN(longitude)
-    ) {
-      console.error("❌ Invalid or missing coordinates:", position);
-      throw new Error("Unable to get valid location coordinates");
-    }
+    const { latitude, longitude } = await getLocationCached();
 
     const radiusMeters = distanceMiles * 1609;
 
-    let matchedType = "restaurant";
-    let extraKeywords: string[] = [];
-
-    if (categories.length > 0) {
-      const mapped = categories.map((c) => categoryTypeMap[c.toLowerCase()]);
-
-      const uniqueTypes = [
-        ...new Set(mapped.map((m) => m?.type || "restaurant")),
-      ];
-      matchedType = uniqueTypes.length === 1 ? uniqueTypes[0] : "restaurant";
-
-      extraKeywords = mapped.map((m) => m?.keyword).filter(Boolean) as string[];
-    }
-
+    const keywords = extractKeywords(categories);
     const keywordParam =
-      extraKeywords.length > 0
-        ? `&keyword=${encodeURIComponent(extraKeywords.join(" "))}`
+      keywords.length > 0
+        ? `&keyword=${encodeURIComponent(keywords.join(" "))}`
         : "";
 
     const url = `${GOOGLE_PLACES_BASE}?location=${latitude.toFixed(
       6
     )},${longitude.toFixed(
       6
-    )}&radius=${radiusMeters}&type=${matchedType}${keywordParam}&key=${API_KEY}`;
+    )}&radius=${radiusMeters}&type=restaurant${keywordParam}&key=${API_KEY}`;
 
     console.log("🍽️ Fetching shuffled restaurants:", url);
 
@@ -192,7 +166,8 @@ export async function fetchShuffledRestaurants({
     return shuffled.map((r: any) => {
       const lat = r.geometry?.location?.lat;
       const lon = r.geometry?.location?.lng;
-      let distance: number | undefined;
+
+      let distance: number | null = null;
 
       if (lat && lon) {
         const meters = getDistanceMeters(latitude, longitude, lat, lon);
@@ -206,9 +181,9 @@ export async function fetchShuffledRestaurants({
         address: r.vicinity,
         photo:
           r.photos?.length > 0
-            ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
+            ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
             : null,
-        distance,
+        distance: distance ?? null,
       };
     });
   } catch (err) {
@@ -217,78 +192,120 @@ export async function fetchShuffledRestaurants({
   }
 }
 
-/**
- * Fetch detailed restaurant info by place_id
- */
+// -------------------------------------------------------------
+// Detailed Google Place Info (needed by unified fetcher)
+// -------------------------------------------------------------
 export async function fetchRestaurantDetails(placeId: string) {
-  const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,formatted_phone_number,website,photos,rating,opening_hours,url,types&key=${API_KEY}`;
+  const cached = await getCachedPlace(placeId);
+  if (cached) return cached;
+
+  const fields = [
+    "name",
+    "formatted_address",
+    "formatted_phone_number",
+    "website",
+    "photos",
+    "rating",
+    "opening_hours",
+    "url",
+    "types",
+    "user_ratings_total",
+    "geometry",
+    "current_opening_hours",
+  ].join(",");
+
+  const detailsUrl = `${DETAILS_BASE}?place_id=${placeId}&fields=${fields}&key=${API_KEY}`;
+
   const res = await fetch(detailsUrl);
   const data = await res.json();
-  console.log("🧾 Details API Response:", data);
 
   if (!data.result) throw new Error("No details found");
 
   const r = data.result;
-  return {
+  const mapped = {
     id: placeId,
     name: r.name,
     address: r.formatted_address,
     phone: r.formatted_phone_number,
     website: r.website || null,
     rating: r.rating || 0,
+    user_ratings_total: r.user_ratings_total ?? null,
     googleUrl: r.url,
     types: r.types || [],
+    geometry: r.geometry || null,
     photos:
       r.photos?.map(
         (p: any) =>
-          `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${p.photo_reference}&key=${API_KEY}`
+          `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${p.photo_reference}&key=${API_KEY}`
       ) || [],
-    hours: r.opening_hours?.weekday_text || [],
+    hours:
+      r.current_opening_hours?.weekday_text ??
+      r.opening_hours?.weekday_text ??
+      [],
+    isOpen:
+      r.current_opening_hours?.open_now ?? r.opening_hours?.open_now ?? null,
   };
+
+  await setCachedPlace(placeId, mapped);
+
+  return mapped;
 }
 
-/**
- * Text-based search (search by name or category)
- */
+// -------------------------------------------------------------
+// Text Search
+// -------------------------------------------------------------
 export async function fetchTextSearch(query: string) {
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== "granted") throw new Error("Location permission not granted");
+  try {
+    const { latitude, longitude } = await getLocationCached();
 
-  const { coords } = await Location.getCurrentPositionAsync({});
-  const { latitude, longitude } = coords;
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+      query
+    )}&location=${latitude},${longitude}&radius=10000&key=${API_KEY}`;
 
-  const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
-    query
-  )}&location=${latitude},${longitude}&radius=10000&key=${API_KEY}`;
+    const res = await fetch(url);
+    const data = await res.json();
 
-  const res = await fetch(url);
-  const data = await res.json();
-
-  return (
-    data.results?.map((r: any) => ({
-      id: r.place_id,
-      name: r.name,
-      rating: r.rating,
-      address: r.formatted_address || r.vicinity,
-      photo:
-        r.photos?.length > 0
-          ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
-          : null,
-    })) ?? []
-  );
+    return (
+      data.results?.map((r: any) => ({
+        id: r.place_id,
+        name: r.name,
+        rating: r.rating,
+        address: r.formatted_address || r.vicinity,
+        photo:
+          r.photos?.length > 0
+            ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
+            : null,
+      })) ?? []
+    );
+  } catch (e) {
+    console.error("fetchTextSearch:", e);
+    return [];
+  }
 }
 
-/*
- * Fetch autocomplete suggestions for a query
- */
+// -------------------------------------------------------------
+// Autocomplete
+// -------------------------------------------------------------
+let AUTOCOMPLETE_SESSION_TOKEN = generateSessionToken();
+
+function generateSessionToken() {
+  return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+export function resetAutocompleteSession() {
+  AUTOCOMPLETE_SESSION_TOKEN = generateSessionToken();
+}
 export async function fetchAutocomplete(query: string) {
   console.log("🔍 fetching autocomplete for:", query);
 
-  const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-    query
-  )}&types=establishment&components=country:us&key=${API_KEY}`;
-
-  console.log("➡️ URL:", url);
+  // Use the global session token
+  const url =
+    `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
+    `?input=${encodeURIComponent(query)}` +
+    `&types=establishment` +
+    `&components=country:us` +
+    `&sessiontoken=${AUTOCOMPLETE_SESSION_TOKEN}` +
+    `&key=${API_KEY}`;
 
   try {
     const res = await fetch(url);
@@ -296,7 +313,6 @@ export async function fetchAutocomplete(query: string) {
     console.log("📦 autocomplete response:", json);
 
     if (!json.predictions || json.predictions.length === 0) {
-      console.warn("⚠️ no predictions returned");
       return [];
     }
 

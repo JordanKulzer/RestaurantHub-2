@@ -20,10 +20,12 @@ import {
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import ImageViewing from "react-native-image-viewing";
-import { fetchYelpDetails } from "../utils/yelpApi";
+
+import { HomeRestaurant } from "../types/homeRestaurant";
+import { fetchRestaurantInfo } from "../utils/fetchRestaurantInfo";
 
 interface HomeSwipeCardProps {
-  restaurant: any;
+  restaurant: HomeRestaurant;
   onLike?: () => void;
   onDislike?: () => void;
   onUndo?: () => void;
@@ -36,19 +38,23 @@ export default function HomeSwipeCard({
   onUndo,
 }: HomeSwipeCardProps) {
   const theme = useTheme();
+
   const defaultPhoto =
+    restaurant.photos?.[0] ||
     restaurant.image ||
     "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png";
 
   const [viewerVisible, setViewerVisible] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [photos, setPhotos] = useState<string[]>([defaultPhoto]);
-  const [hasLoadedDetails, setHasLoadedDetails] = useState(false);
-  const [hoursVisible, setHoursVisible] = useState(false);
-  const [hours, setHours] = useState<any[]>([]);
-  const [isOpen, setIsOpen] = useState<boolean | null>(
-    restaurant.isOpen ?? null
+  const [photos, setPhotos] = useState<string[]>(
+    Array.isArray(restaurant.photos) && restaurant.photos.length > 0
+      ? restaurant.photos
+      : [defaultPhoto]
   );
+  const [hoursVisible, setHoursVisible] = useState(false);
+  const hours = restaurant.hours ?? [];
+  const isOpen = restaurant.isOpen ?? null;
+
   const likeScale = useRef(new Animated.Value(1)).current;
   const dislikeScale = useRef(new Animated.Value(1)).current;
   const undoScale = useRef(new Animated.Value(1)).current;
@@ -70,75 +76,78 @@ export default function HomeSwipeCard({
     ]).start(() => callback && callback());
   };
 
-  useEffect(() => {
-    let mounted = true;
-    const loadDetails = async () => {
-      console.log(`🟢 [${restaurant.name}] Fetching details...`);
-      const start = Date.now();
-      try {
-        const details = await fetchYelpDetails(restaurant.id);
-        const duration = Date.now() - start;
-        console.log(`✅ [${restaurant.name}] Details fetched in ${duration}ms`);
-        if (!mounted) return;
+  // useEffect(() => {
+  //   let mounted = true;
 
-        console.log(
-          `📸 [${restaurant.name}] Received ${
-            details?.photos?.length || 0
-          } photos`
-        );
-        console.log(`🖼️ Current displayed: ${photos[0]}`);
-        console.log(`🆕 New first photo: ${details?.photos?.[0]}`);
+  //   const loadFullDetails = async () => {
+  //     try {
+  //       const details = await fetchRestaurantInfo(
+  //         restaurant.source,
+  //         restaurant.id
+  //       );
 
-        if (details?.photos?.length > 1) {
-          await Promise.all(
-            details.photos.map((uri: string) => Image.prefetch(uri))
-          );
-          console.log(
-            `✅ [${restaurant.name}] Prefetched all ${details.photos.length} photos`
-          );
-          setPhotos(details.photos);
-          console.log(`🔁 [${restaurant.name}] Updated photos state`);
-        }
-        if (details?.hours) setHours(details.hours);
-        if (typeof details?.isOpen === "boolean") setIsOpen(details.isOpen);
-        setHasLoadedDetails(true);
-      } catch (err) {
-        console.warn(`⚠️ [${restaurant.name}] Prefetch failed:`, err);
-      }
-    };
-    loadDetails();
-    return () => {
-      mounted = false;
-    };
-  }, [restaurant.id]);
+  //       if (!mounted || !details) return;
 
-  const handleNextPhoto = async () => {
-    if (!hasLoadedDetails && restaurant.id) {
-      try {
-        const details = await fetchYelpDetails(restaurant.id);
-        if (details?.photos?.length > 1) setPhotos(details.photos);
-      } catch (err) {
-        console.warn("⚠️ Failed to fetch Yelp photos:", err);
-      }
-      setHasLoadedDetails(true);
-    }
+  //       const enriched: HomeRestaurant = {
+  //         ...restaurant,
+  //         photos:
+  //           details.photos && details.photos.length > 0
+  //             ? details.photos
+  //             : restaurant.photos,
+  //         rating: details.rating ?? restaurant.rating,
+  //         reviewCount: details.reviewCount ?? restaurant.reviewCount,
+  //         price: details.price ?? restaurant.price,
+  //         address: details.address ?? restaurant.address,
+  //         yelpUrl: details.yelpUrl ?? restaurant.yelpUrl,
+  //         googleMapsUrl: details.googleMapsUrl ?? restaurant.googleMapsUrl,
+  //       };
+
+  //       if (enriched.photos && enriched.photos.length > 0) {
+  //         setPhotos(enriched.photos);
+  //       }
+
+  //       const detailsWithHours = details as any;
+  //       if (detailsWithHours.hours) {
+  //         setHours(
+  //           Array.isArray(detailsWithHours.hours) ? detailsWithHours.hours : []
+  //         );
+  //       }
+  //       if (typeof detailsWithHours.isOpen === "boolean") {
+  //         setIsOpen(detailsWithHours.isOpen);
+  //       }
+  //     } catch (err) {
+  //       console.warn(
+  //         `Failed to fetch full details for ${restaurant.name}`,
+  //         err
+  //       );
+  //     }
+  //   };
+
+  //   loadFullDetails();
+  //   return () => {
+  //     mounted = false;
+  //   };
+  // }, [restaurant.id]);
+
+  const handleNextPhoto = () => {
     if (photos.length <= 1) return;
     setActiveIndex((prev) => (prev + 1) % photos.length);
   };
 
-  // Ensure we always have a photo to display
-  const currentPhoto = photos[0] || defaultPhoto;
+  const currentPhoto = photos[activeIndex] || defaultPhoto;
 
   return (
     <Card
       mode="elevated"
       style={[styles.card, { backgroundColor: theme.colors.surface }]}
     >
-      {/* --- Image + Gradient --- */}
-      <TouchableOpacity activeOpacity={0.9} onPress={handleNextPhoto}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handleNextPhoto}
+        onLongPress={() => setViewerVisible(true)}
+      >
         <Image
-          key={restaurant.id}
-          source={{ uri: photos[activeIndex] || defaultPhoto }}
+          source={{ uri: currentPhoto }}
           style={styles.carouselImage}
           resizeMode="cover"
         />
@@ -146,15 +155,13 @@ export default function HomeSwipeCard({
           colors={["transparent", "rgba(0,0,0,0.6)"]}
           style={StyleSheet.absoluteFillObject}
         />
-
         {photos.length > 1 && (
           <View style={styles.photoIndicator}>
             <Text style={styles.photoIndicatorText}>
-              {activeIndex + 1}/{photos.length}
+              {`${activeIndex + 1}/${photos.length}`}
             </Text>
           </View>
         )}
-
         <View
           style={[
             styles.hintBadge,
@@ -165,36 +172,37 @@ export default function HomeSwipeCard({
         </View>
       </TouchableOpacity>
 
-      {/* --- Info Section --- */}
       <View style={styles.infoSection}>
         <Text style={[styles.name, { color: theme.colors.onSurface }]}>
           {restaurant.name}
         </Text>
 
         <View style={styles.metaRow}>
-          {restaurant.rating && (
+          {restaurant.rating != null && (
             <Text style={[styles.metaText, { color: theme.colors.onSurface }]}>
-              ⭐ {restaurant.rating.toFixed(1)} / 5.0
+              {`⭐ ${restaurant.rating.toFixed(1)}`}
             </Text>
           )}
-          {restaurant.reviews && (
+
+          {restaurant.reviewCount != null && (
             <Text
               style={[
                 styles.metaText,
                 { color: theme.colors.onSurface + "99" },
               ]}
             >
-              ({restaurant.reviews} reviews)
+              {`(${restaurant.reviewCount} reviews)`}
             </Text>
           )}
-          {restaurant.price && (
+
+          {restaurant.price != null && (
             <Text
               style={[
                 styles.metaText,
                 { color: theme.colors.onSurface + "99" },
               ]}
             >
-              • {restaurant.price}
+              {`• ${restaurant.price}`}
             </Text>
           )}
         </View>
@@ -214,11 +222,7 @@ export default function HomeSwipeCard({
             </Text>
           )}
 
-          <TouchableOpacity
-            style={[{ paddingVertical: 4 }]}
-            onPress={() => setHoursVisible(true)}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity onPress={() => setHoursVisible(true)}>
             <Text
               style={{
                 marginLeft: 8,
@@ -233,16 +237,6 @@ export default function HomeSwipeCard({
           </TouchableOpacity>
         </View>
 
-        {restaurant.categories && (
-          <Text
-            style={[
-              styles.categories,
-              { color: theme.colors.onSurface + "99" },
-            ]}
-          >
-            {restaurant.categories}
-          </Text>
-        )}
         {restaurant.address && (
           <Text
             style={[styles.detail, { color: theme.colors.onSurface + "99" }]}
@@ -250,83 +244,44 @@ export default function HomeSwipeCard({
             {restaurant.address}
           </Text>
         )}
-        {restaurant.distanceMiles && (
+
+        {restaurant.distanceMiles != null && (
           <Text
             style={[styles.detail, { color: theme.colors.onSurface + "99" }]}
           >
-            {restaurant.distanceMiles} mi away
+            {`${restaurant.distanceMiles.toFixed(2)} mi away`}
           </Text>
         )}
 
-        {/* --- Link Buttons --- */}
         <View style={styles.linkRow}>
-          {restaurant.yelpUrl && (
-            <Button
-              mode="outlined"
-              icon="open-in-new"
-              textColor={theme.colors.secondary}
-              style={[
-                styles.linkButton,
-                {
-                  flex: 1,
-                  marginRight: 6,
-                  borderColor: theme.colors.secondary,
-                },
-              ]}
-              onPress={() => Linking.openURL(restaurant.yelpUrl)}
-            >
-              Yelp
-            </Button>
-          )}
-
+          {/* Google Maps */}
           <Button
             mode="outlined"
             icon="google-maps"
-            textColor={theme.colors.tertiary}
-            style={[
-              styles.linkButton,
-              {
-                flex: 1,
-                marginRight: Platform.OS === "ios" ? 6 : 0,
-                borderColor: theme.colors.tertiary,
-              },
-            ]}
-            onPress={() => {
-              const query = encodeURIComponent(
-                `${restaurant.name} ${restaurant.address || ""}`.trim()
-              );
-              Linking.openURL(
-                restaurant.placeId
-                  ? `https://www.google.com/maps/place/?q=place_id:${restaurant.placeId}`
-                  : `https://www.google.com/maps/search/?api=1&query=${query}`
-              );
-            }}
+            textColor={theme.colors.primary}
+            style={[styles.linkButton, { borderColor: theme.colors.primary }]}
+            onPress={() => Linking.openURL(restaurant.googleMapsUrl!)}
           >
             Google
           </Button>
 
-          {Platform.OS === "ios" && (
-            <Button
-              mode="outlined"
-              icon="map"
-              textColor={theme.colors.primary}
-              style={[
-                styles.linkButton,
-                { flex: 1, borderColor: theme.colors.primary },
-              ]}
-              onPress={() => {
-                const encoded = encodeURIComponent(
-                  `${restaurant.name} ${restaurant.address || ""}`.trim()
-                );
-                Linking.openURL(`http://maps.apple.com/?q=${encoded}`);
-              }}
-            >
-              Apple
-            </Button>
-          )}
+          {/* Apple Maps */}
+          <Button
+            mode="outlined"
+            icon={Platform.OS === "ios" ? "map" : "map-marker"}
+            textColor={theme.colors.tertiary}
+            style={[styles.linkButton, { borderColor: theme.colors.tertiary }]}
+            onPress={() => {
+              const url = `http://maps.apple.com/?daddr=${encodeURIComponent(
+                restaurant.address || restaurant.name
+              )}`;
+              Linking.openURL(url);
+            }}
+          >
+            Apple
+          </Button>
         </View>
 
-        {/* --- Like / Dislike / Undo Buttons --- */}
         <View style={styles.actionRow}>
           <Animated.View style={{ transform: [{ scale: dislikeScale }] }}>
             <IconButton
@@ -378,6 +333,7 @@ export default function HomeSwipeCard({
         visible={viewerVisible}
         onRequestClose={() => setViewerVisible(false)}
       />
+
       <Portal>
         <Modal
           visible={hoursVisible}
@@ -392,22 +348,14 @@ export default function HomeSwipeCard({
           </Text>
 
           {hours.length > 0 ? (
-            hours.map((entry: any, i: number) => {
-              const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-              const dayLabel = days[entry.day];
-              return (
-                <Text
-                  key={i}
-                  style={[
-                    styles.hoursText,
-                    { color: theme.colors.onSurface + "CC" },
-                  ]}
-                >
-                  {dayLabel}: {entry.start.slice(0, 2)}:{entry.start.slice(2)} –{" "}
-                  {entry.end.slice(0, 2)}:{entry.end.slice(2)}
-                </Text>
-              );
-            })
+            hours.map((line, i) => (
+              <Text
+                key={i}
+                style={[styles.hoursText, { color: theme.colors.onSurface }]}
+              >
+                {line}
+              </Text>
+            ))
           ) : (
             <Text style={{ color: theme.colors.onSurface + "99" }}>
               Hours unavailable
@@ -428,11 +376,41 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
   },
-  carouselImage: { width: "100%", height: 240, borderRadius: 10 },
+  carouselImage: {
+    width: "100%",
+    height: 240,
+    borderRadius: 10,
+  },
   infoSection: { padding: 16 },
   name: { fontSize: 22, fontWeight: "700", marginBottom: 4 },
-  categories: { fontSize: 14, marginBottom: 6 },
   detail: { fontSize: 13, marginBottom: 3 },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginBottom: 4,
+  },
+  hoursRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 8,
+  },
+  metaText: { fontSize: 14, marginRight: 6 },
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+    gap: 8,
+  },
+  linkButton: { flex: 1, borderRadius: 25 },
+  actionRow: {
+    flexDirection: "row",
+    justifyContent: "space-evenly",
+    marginTop: 20,
+    paddingVertical: 10,
+  },
+  actionBtn: { elevation: 6 },
+  actionBtnSmall: { elevation: 5 },
   photoIndicator: {
     position: "absolute",
     bottom: 8,
@@ -452,59 +430,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   hintText: { color: "#fff", fontSize: 13, fontWeight: "500" },
-  linkRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    marginTop: 10,
-  },
-  linkButton: {
-    borderRadius: 25,
-    minWidth: 100,
-  },
   hoursModal: {
     marginHorizontal: 20,
     borderRadius: 16,
     padding: 20,
-    alignSelf: "center",
   },
   hoursTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 10,
+    marginBottom: 12,
     textAlign: "center",
-  },
-  hoursRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 8,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    marginBottom: 4,
-  },
-  metaText: {
-    fontSize: 14,
-    marginRight: 6,
   },
   hoursText: {
     fontSize: 14,
     marginVertical: 2,
     textAlign: "center",
-  },
-  actionRow: {
-    flexDirection: "row",
-    justifyContent: "space-evenly",
-    alignItems: "center",
-    marginTop: 20,
-    paddingVertical: 10,
-  },
-  actionBtn: {
-    elevation: 6,
-  },
-  actionBtnSmall: {
-    elevation: 5,
   },
 });

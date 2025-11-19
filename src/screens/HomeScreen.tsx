@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -6,33 +6,38 @@ import {
   Platform,
   UIManager,
   Easing,
-  TouchableOpacity,
   ScrollView,
+  TouchableOpacity,
 } from "react-native";
 import {
   Button,
   Chip,
-  IconButton,
   Modal,
   Portal,
-  Surface,
   Text,
   useTheme,
+  ProgressBar,
 } from "react-native-paper";
-import { useNavigation } from "@react-navigation/native";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Swiper from "react-native-deck-swiper";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import * as Location from "expo-location";
-import { fetchYelpRestaurants } from "../utils/yelpApi";
-import HomeSkeleton from "../components/HomeSkeleton";
 import {
   RestaurantDetailModal,
   HomeSwipeCard,
   QuickActionsMenu,
+  UpgradeModal,
+  HomeSkeleton,
+  CreateListModal,
 } from "../components";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { fetchGoogleDiscovery } from "../utils/fetchGoogleDiscovery";
+import { HomeRestaurant } from "../types/homeRestaurant";
+import { getFavorites } from "../utils/favoritesApis";
+import { fetchRestaurantInfo } from "../utils/fetchRestaurantInfo";
+import { RestaurantCard } from "../types/restaurant";
+import { getLocationCached } from "../utils/locationHelper";
 
 if (
   Platform.OS === "android" &&
@@ -41,29 +46,16 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-interface Restaurant {
-  id: string;
-  name: string;
-  image?: string;
-  rating?: number;
-  price?: string;
-  reviews?: number;
-  address?: string;
-  categories?: string;
-  phone?: string;
-  yelpUrl?: string;
-  isOpen?: boolean;
-  distanceMiles?: string;
-}
+const FREE_DAILY_SWIPES = 2;
 
 export default function HomeScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [restaurants, setRestaurants] = useState<HomeRestaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDetails, setShowDetails] = useState(false);
   const [selectedRestaurant, setSelectedRestaurant] = useState<any>(null);
-  const [liked, setLiked] = useState<Restaurant[]>([]);
+  const [liked, setLiked] = useState<HomeRestaurant[]>([]);
 
   const [showChips, setShowChips] = useState(false);
   const [activeModal, setActiveModal] = useState<
@@ -74,65 +66,60 @@ export default function HomeScreen() {
   const [ratingFilter, setRatingFilter] = useState<string>("all");
   const [distanceFilter, setDistanceFilter] = useState<string>("any");
   const [allSwiped, setAllSwiped] = useState(false);
-  const [addMenuVisible, setAddMenuVisible] = useState(false);
-  const swiperRef = useRef<Swiper<Restaurant>>(null);
-  const [lastSwipedIndex, setLastSwipedIndex] = useState<number | null>(null);
+  const swiperRef = useRef<Swiper<HomeRestaurant>>(null);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(
-    null
-  );
+  const [createListVisible, setCreateListVisible] = useState(false);
+  const [pendingListCallback, setPendingListCallback] = useState<
+    null | ((l: any) => void)
+  >(null);
 
-  const animateFadeIn = () => {
-    fadeAnim.setValue(0);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 700, // ⬆️ slightly longer for smoother transition
-      easing: Easing.bezier(0.25, 0.1, 0.25, 1), // smoother easing curve
-      useNativeDriver: true,
-    }).start();
-  };
+  const [currentRestaurant, setCurrentRestaurant] =
+    useState<HomeRestaurant | null>(null);
+  const [favoritesIds, setFavoritesIds] = useState<Set<string>>(new Set());
+  const [initialLoad, setInitialLoad] = useState(true);
+  const hasLoadedOnce = useRef(false);
 
-  const loadRestaurants = async () => {
-    try {
-      setLoading(true);
-      setAllSwiped(false);
-      setCurrentCardIndex(0);
+  // Swipe tracking
+  const [swipeCount, setSwipeCount] = useState(0);
+  const [lastResetDate, setLastResetDate] = useState<string>("");
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [isPremium, setIsPremium] = useState(false); // TODO: Connect to your auth/subscription system
 
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        console.warn("⚠️ Location permission not granted");
-        setLoading(false);
-        return;
+  const isFocused = useIsFocused();
+
+  // Check and reset daily swipe count
+  useEffect(() => {
+    const checkDailyReset = async () => {
+      await AsyncStorage.multiRemove(["swipeCount", "lastResetDate"]); // Uncomment for resetting swipe counts
+
+      const today = new Date().toDateString();
+      const stored = await AsyncStorage.getItem("lastResetDate");
+      const storedCount = await AsyncStorage.getItem("swipeCount");
+
+      if (stored !== today) {
+        // New day - reset counter
+        setSwipeCount(0);
+        setLastResetDate(today);
+        await AsyncStorage.setItem("lastResetDate", today);
+        await AsyncStorage.setItem("swipeCount", "0");
+      } else {
+        const parsed = parseInt(storedCount || "0", 10);
+        const safe = Math.min(parsed, FREE_DAILY_SWIPES);
+        setSwipeCount(safe);
+        setLastResetDate(today);
       }
-      const { coords } = await Location.getCurrentPositionAsync({});
-      const { latitude, longitude } = coords;
+    };
 
-      const results = await fetchYelpRestaurants(
-        latitude,
-        longitude,
-        "restaurants",
-        filters
-      );
+    checkDailyReset();
+  }, []);
 
-      const filtered = results.filter((r: Restaurant) => {
-        const meetsRating =
-          ratingFilter === "all" || (r.rating ?? 0) >= parseFloat(ratingFilter);
-        const meetsDistance =
-          distanceFilter === "any" ||
-          parseFloat(r.distanceMiles ?? "0") <= parseFloat(distanceFilter);
-        return meetsRating && meetsDistance;
-      });
-      setRestaurants(filtered.sort(() => Math.random() - 0.5));
-      animateFadeIn();
-      setCurrentRestaurant(filtered[0] ?? null);
-    } catch (err) {
-      console.error("❌ Error fetching Yelp restaurants:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    AsyncStorage.setItem("likedRestaurants", JSON.stringify(liked)).catch(
+      (err) => console.error("Failed to persist likedRestaurants:", err)
+    );
+  }, [liked]);
 
   useEffect(() => {
     const init = async () => {
@@ -143,11 +130,157 @@ export default function HomeScreen() {
     init();
   }, []);
 
+  const animateFadeIn = () => {
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 700,
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handleLike = (restaurant: HomeRestaurant) => {
+    setLiked((prev) => {
+      if (prev.some((x) => x.id === restaurant.id)) return prev;
+      return [...prev, restaurant];
+    });
+  };
+
+  const incrementSwipeCount = async () => {
+    const newCount = Math.min(swipeCount + 1, FREE_DAILY_SWIPES);
+
+    if (!isPremium && newCount > FREE_DAILY_SWIPES) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
+    setSwipeCount(newCount);
+    await AsyncStorage.setItem("swipeCount", newCount.toString());
+
+    if (!isPremium && newCount === FREE_DAILY_SWIPES) {
+      setShowUpgradeModal(true);
+    }
+  };
+
+  const loadRestaurants = async () => {
+    try {
+      setLoading(true);
+      setAllSwiped(false);
+      setCurrentCardIndex(0);
+
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+
+      try {
+        const loc = await getLocationCached();
+        latitude = loc.latitude;
+        longitude = loc.longitude;
+      } catch (e) {
+        console.warn("⚠️ Could not get location:", e);
+      }
+
+      if (latitude == null || longitude == null) {
+        return;
+      }
+
+      const results = await fetchGoogleDiscovery({
+        latitude,
+        longitude,
+        filters,
+      });
+
+      const filtered = results.filter((r) => {
+        const ratingValue = Number(r.rating);
+        const ratingMin = parseFloat(ratingFilter);
+        const meetsRating =
+          ratingFilter === "all" ||
+          (!isNaN(ratingValue) && ratingValue >= ratingMin);
+
+        const distValue = Number(r.distanceMiles);
+        const distMax = parseFloat(distanceFilter);
+        const meetsDistance =
+          distanceFilter === "any" ||
+          (!isNaN(distValue) && distValue <= distMax);
+
+        return meetsRating && meetsDistance;
+      });
+
+      const randomized = filtered.sort(() => Math.random() - 0.5);
+
+      const enriched = await Promise.all(
+        randomized.map(async (r) => {
+          const details = await fetchRestaurantInfo(r.source, r.id);
+          const safeDetails: Partial<RestaurantCard> = details ?? {};
+
+          const fallbackImg =
+            r.image ||
+            "https://upload.wikimedia.org/wikipedia/commons/ac/No_image_available.svg";
+          return {
+            ...r,
+            ...safeDetails,
+            distanceMiles: r.distanceMiles,
+
+            photos:
+              Array.isArray(safeDetails.photos) && safeDetails.photos.length > 0
+                ? safeDetails.photos
+                : Array.isArray(r.photos) && r.photos.length > 0
+                ? r.photos
+                : [fallbackImg],
+
+            rating: safeDetails.rating ?? r.rating,
+            reviewCount: safeDetails.reviewCount ?? r.reviewCount,
+            price: safeDetails.price ?? r.price,
+            address: safeDetails.address ?? r.address,
+            yelpUrl: safeDetails.yelpUrl ?? r.yelpUrl,
+            googleMapsUrl: safeDetails.googleMapsUrl ?? r.googleMapsUrl,
+            hours: safeDetails.hours ?? [],
+            isOpen: safeDetails.isOpen ?? null,
+          };
+        })
+      );
+
+      setRestaurants(enriched);
+      setCurrentRestaurant(enriched[0] ?? null);
+
+      if (!hasLoadedOnce.current) {
+        animateFadeIn();
+        setInitialLoad(false);
+        hasLoadedOnce.current = true;
+      }
+    } catch (err) {
+      console.error("❌ Error loading Google restaurants:", err);
+      console.error(
+        "Stack trace:",
+        err instanceof Error ? err.stack : "No stack"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshFavorites = useCallback(async () => {
+    try {
+      const favs = await getFavorites();
+      setFavoritesIds(new Set(favs.map((f) => f.id)));
+    } catch (e) {
+      console.error("Failed to load favorites:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    refreshFavorites();
+  }, [isFocused, refreshFavorites]);
+
   const renderModal = (type: string) => (
     <Portal>
       <Modal
         visible={activeModal === type}
-        onDismiss={() => setActiveModal(null)}
+        onDismiss={async () => {
+          setActiveModal(null);
+          await loadRestaurants();
+        }}
         contentContainerStyle={[
           styles.modalContainer,
           { backgroundColor: theme.colors.surface },
@@ -181,7 +314,7 @@ export default function HomeScreen() {
               styles.modalScrollContent,
               { paddingBottom: 24 },
             ]}
-            style={{ maxHeight: 360 }} // gives space for footer, keeps it visible
+            style={{ maxHeight: 360 }}
           >
             {type === "category" && (
               <View style={styles.chipGrid}>
@@ -294,7 +427,6 @@ export default function HomeScreen() {
             )}
           </ScrollView>
 
-          {/* Footer */}
           <View style={styles.modalFooter}>
             <Button
               mode="contained"
@@ -327,60 +459,108 @@ export default function HomeScreen() {
     </Portal>
   );
 
+  const handleOpenCreateList = (onCreatedCallback?: (newList: any) => void) => {
+    setPendingListCallback(() => onCreatedCallback || null);
+    setCreateListVisible(true);
+  };
+
+  const swipesRemaining = Math.max(0, FREE_DAILY_SWIPES - swipeCount);
+
+  const showSwipeCounter = !isPremium && swipesRemaining <= 10;
+
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       edges={["top", "left", "right"]}
     >
-      <View
-        style={{
-          paddingHorizontal: 16,
-          backgroundColor: theme.colors.background,
-          zIndex: 10,
-        }}
-      >
+      <View style={{ flex: 1 }}>
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
+            paddingHorizontal: 16,
+            backgroundColor: theme.colors.background,
+            zIndex: 10,
           }}
         >
-          <Text
+          <View
             style={{
-              fontSize: 22,
-              fontWeight: "700",
-              color: theme.colors.primary,
-              letterSpacing: 0.5,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
             }}
           >
-            FoodFinder
-          </Text>
-          {currentRestaurant && (
-            <View>
-              <QuickActionsMenu
-                restaurant={currentRestaurant}
-                isFavorite={liked.some((f) => f.id === currentRestaurant.id)}
-                onToggleFavorite={(r) => {
-                  setLiked((prev) =>
-                    prev.some((f) => f.id === r.id)
-                      ? prev.filter((f) => f.id !== r.id)
-                      : [...prev, r]
-                  );
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "700",
+                color: theme.colors.primary,
+                letterSpacing: 0.5,
+              }}
+            >
+              FoodFinder
+            </Text>
+            <View style={{ minWidth: 40, alignItems: "flex-end" }}>
+              {currentRestaurant ? (
+                <QuickActionsMenu
+                  restaurant={currentRestaurant}
+                  isFavorite={favoritesIds.has(currentRestaurant.id)}
+                  onFavoriteChange={refreshFavorites}
+                  onCreateNewList={handleOpenCreateList}
+                />
+              ) : (
+                <View style={{ width: 40, height: 55 }} />
+              )}
+            </View>
+          </View>
+
+          {showSwipeCounter && (
+            <View style={styles.swipeCounterContainer}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  marginBottom: 4,
                 }}
-                onCreateNewList={() => console.log("🆕 Create new list")}
+              >
+                <Text
+                  style={[
+                    styles.swipeCounterText,
+                    { color: theme.colors.onSurface },
+                  ]}
+                >
+                  {swipesRemaining} swipes remaining today
+                </Text>
+                <TouchableOpacity onPress={() => setShowUpgradeModal(true)}>
+                  <Text
+                    style={{ color: theme.colors.primary, fontWeight: "600" }}
+                  >
+                    Upgrade ✨
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <ProgressBar
+                progress={swipeCount / FREE_DAILY_SWIPES}
+                color={
+                  swipesRemaining <= 5
+                    ? theme.colors.error
+                    : theme.colors.primary
+                }
+                style={{ height: 4, borderRadius: 2 }}
               />
             </View>
           )}
-        </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipScroll}
-        >
-          {["Clear Filters", "Category", "Rating", "Location", "Distance"].map(
-            (label) => {
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipScroll}
+          >
+            {[
+              "Clear Filters",
+              "Category",
+              "Rating",
+              "Location",
+              "Distance",
+            ].map((label) => {
               const isActive =
                 (label === "Category" && filters.length > 0) ||
                 (label === "Rating" && ratingFilter !== "all") ||
@@ -434,71 +614,186 @@ export default function HomeScreen() {
                   {label}
                 </Chip>
               );
-            }
-          )}
-        </ScrollView>
-      </View>
+            })}
+          </ScrollView>
+        </View>
 
-      <Animated.View
-        style={{
-          flex: 1,
-          marginTop: 10,
-          marginBottom: 120,
-          opacity: fadeAnim,
-          transform: [
-            {
-              scale: fadeAnim.interpolate({
-                inputRange: [0, 0.6, 1],
-                outputRange: [0.96, 0.985, 1],
-              }),
-            },
-          ],
-        }}
-      >
-        <Swiper
-          ref={swiperRef}
-          cards={restaurants}
-          renderCard={(r, index) => {
-            return r ? (
-              <HomeSwipeCard
-                key={r.id}
-                restaurant={r}
-                onLike={() => swiperRef.current?.swipeRight()}
-                onDislike={() => swiperRef.current?.swipeLeft()}
-                onUndo={() => swiperRef.current?.swipeBack()}
+        <View style={{ flex: 1, marginTop: 10, marginBottom: 120 }}>
+          {loading ? (
+            <View style={{ flex: 1 }}>
+              <HomeSkeleton />
+            </View>
+          ) : allSwiped || restaurants.length === 0 ? (
+            <View
+              style={{
+                flex: 1,
+                justifyContent: "center",
+                alignItems: "center",
+                paddingHorizontal: 32,
+              }}
+            >
+              <Text style={{ fontSize: 48, marginBottom: 16 }}>🍽️</Text>
+              <Text
+                style={{
+                  fontSize: 24,
+                  fontWeight: "700",
+                  color: theme.colors.onSurface,
+                  marginBottom: 8,
+                  textAlign: "center",
+                }}
+              >
+                You've seen all restaurants!
+              </Text>
+              <Text
+                style={{
+                  fontSize: 16,
+                  color: theme.colors.onSurface + "99",
+                  marginBottom: 24,
+                  textAlign: "center",
+                }}
+              >
+                Adjust your filters or expand your search radius to discover
+                more places
+              </Text>
+
+              <Button
+                mode="contained"
+                onPress={async () => {
+                  setFilters([]);
+                  setRatingFilter("all");
+                  setDistanceFilter("any");
+                  await loadRestaurants();
+                }}
+                buttonColor={theme.colors.primary}
+                style={{
+                  marginBottom: 12,
+                  borderRadius: 25,
+                  paddingHorizontal: 16,
+                }}
+              >
+                Clear Filters & Reload
+              </Button>
+
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setActiveModal("distance");
+                }}
+                textColor={theme.colors.primary}
+                style={{
+                  borderRadius: 25,
+                  paddingHorizontal: 16,
+                  borderColor: theme.colors.primary,
+                }}
+              >
+                Expand Search Area
+              </Button>
+            </View>
+          ) : (
+            <Animated.View
+              style={{
+                flex: 1,
+                // marginTop: 10,
+                // marginBottom: 120,
+                opacity: initialLoad ? fadeAnim : 1,
+                transform: initialLoad
+                  ? [
+                      {
+                        scale: fadeAnim.interpolate({
+                          inputRange: [0, 0.6, 1],
+                          outputRange: [0.96, 0.985, 1],
+                        }),
+                      },
+                    ]
+                  : [],
+              }}
+            >
+              <Swiper
+                ref={swiperRef}
+                cards={restaurants}
+                renderCard={(r, index) => {
+                  if (!r) return null;
+                  return (
+                    <HomeSwipeCard
+                      key={r.id}
+                      restaurant={r}
+                      onLike={() => {
+                        if (!isPremium && swipesRemaining === 0) {
+                          setShowUpgradeModal(true);
+                          return;
+                        }
+                        swiperRef.current?.swipeRight();
+                      }}
+                      onDislike={() => {
+                        if (!isPremium && swipesRemaining === 0) {
+                          setShowUpgradeModal(true);
+                          return;
+                        }
+                        swiperRef.current?.swipeLeft();
+                      }}
+                      onUndo={() => {
+                        swiperRef.current?.swipeBack();
+                      }}
+                    />
+                  );
+                }}
+                onSwiped={(index) => {
+                  incrementSwipeCount();
+                  setCurrentRestaurant(restaurants[index + 1] ?? null);
+                  setCurrentCardIndex(index + 1);
+                }}
+                onSwipedRight={(index) => {
+                  const r = restaurants[index];
+                  if (r) handleLike(r);
+                }}
+                onSwipedAll={() => {
+                  setCurrentRestaurant(null);
+                  setAllSwiped(true);
+                }}
+                onSwipedAborted={() =>
+                  setCurrentRestaurant(restaurants[currentCardIndex])
+                }
+                disableLeftSwipe={!isPremium && swipesRemaining === 0}
+                disableRightSwipe={!isPremium && swipesRemaining === 0}
+                backgroundColor="transparent"
+                stackSize={2}
+                verticalSwipe={false}
+                animateCardOpacity
+                cardVerticalMargin={0}
+                containerStyle={{ flex: 1 }}
+                cardStyle={{ height: "100%" }}
               />
-            ) : null;
-          }}
-          onSwiped={(index) => {
-            setCurrentRestaurant(restaurants[index + 1] ?? null);
-            setCurrentCardIndex(index + 1);
-          }}
-          onSwipedAll={() => {
-            setCurrentRestaurant(null);
-            setAllSwiped(true);
-          }}
-          onSwipedAborted={() =>
-            setCurrentRestaurant(restaurants[currentCardIndex])
-          }
-          backgroundColor="transparent"
-          stackSize={2}
-          verticalSwipe={false}
-          animateCardOpacity
-          cardVerticalMargin={0}
-          containerStyle={{ flex: 1 }}
-          cardStyle={{ height: "100%" }}
-        />
-      </Animated.View>
+            </Animated.View>
+          )}
+        </View>
 
-      {renderModal("category")}
-      {renderModal("rating")}
-      {renderModal("location")}
-      {renderModal("distance")}
-      <RestaurantDetailModal
-        visible={showDetails}
-        onDismiss={() => setShowDetails(false)}
-        restaurant={selectedRestaurant}
-      />
+        {renderModal("category")}
+        {renderModal("rating")}
+        {renderModal("location")}
+        {renderModal("distance")}
+        <UpgradeModal
+          visible={showUpgradeModal}
+          onDismiss={() => setShowUpgradeModal(false)}
+          freeLimit={FREE_DAILY_SWIPES}
+        />
+        <RestaurantDetailModal
+          visible={showDetails}
+          onDismiss={() => setShowDetails(false)}
+          restaurant={selectedRestaurant}
+        />
+        <CreateListModal
+          visible={createListVisible}
+          onDismiss={() => setCreateListVisible(false)}
+          onCreated={(newList) => {
+            setCreateListVisible(false);
+
+            if (pendingListCallback) {
+              pendingListCallback(newList);
+              setPendingListCallback(null);
+            }
+          }}
+        />
+      </View>
     </SafeAreaView>
   );
 }
@@ -508,7 +803,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    paddingBottom: 80, // extra space so last chips aren't hidden behind buttons
+    paddingBottom: 80,
   },
   modalButtonsSticky: {
     position: "absolute",
@@ -546,11 +841,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 22,
     overflow: "hidden",
     paddingBottom: 0,
-  },
-  modalInner: {
-    flexGrow: 1,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
   },
   modalHeader: {
     alignItems: "center",
@@ -590,5 +880,40 @@ const styles = StyleSheet.create({
   modalBtnClear: {
     borderRadius: 25,
     flex: 1,
+  },
+  swipeCounterContainer: {
+    marginVertical: 8,
+    paddingHorizontal: 4,
+  },
+  swipeCounterText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  featureList: {
+    width: "100%",
+    marginBottom: 24,
+  },
+  featureItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  featureIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  featureText: {
+    fontSize: 16,
+    flex: 1,
+  },
+  upgradeButton: {
+    width: "100%",
+    borderRadius: 25,
+    paddingVertical: 4,
+  },
+  resetNote: {
+    fontSize: 12,
+    marginTop: 16,
+    textAlign: "center",
   },
 });

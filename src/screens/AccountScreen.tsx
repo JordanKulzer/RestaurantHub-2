@@ -21,6 +21,8 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
+
 import CreateListModal from "../components/CreateListModal";
 import { getLists, ListWithCount } from "../utils/listsApi";
 
@@ -45,18 +47,12 @@ const mockStarred = [
 export default function AccountScreen() {
   const theme = useTheme();
   const navigation: any = useNavigation();
+  const isFocused = useIsFocused();
+
   const [lists, setLists] = useState<ListWithCount[]>([]);
   const [starred] = useState(mockStarred);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [loadingLists, setLoadingLists] = useState(false);
-
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    if (isFocused) {
-      loadLists();
-    }
-  }, [isFocused]);
 
   const loadLists = useCallback(async () => {
     try {
@@ -70,18 +66,29 @@ export default function AccountScreen() {
     }
   }, []);
 
+  useEffect(() => {
+    if (isFocused) {
+      loadLists();
+    }
+  }, [isFocused, loadLists]);
+
   const renderStarred = ({ item }: any) => (
-    <TouchableOpacity style={styles.starredItem}>
+    <TouchableOpacity style={styles.starredItem} activeOpacity={0.9}>
       <Image source={{ uri: item.image }} style={styles.starredImage} />
-      <Text style={[styles.starredLabel, { color: theme.colors.onSurface }]}>
-        {item.name}
-      </Text>
+      <View style={styles.starredOverlay}>
+        <Text
+          style={[styles.starredLabel, { color: theme.colors.surface }]}
+          numberOfLines={1}
+        >
+          {item.name}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 
   const renderListCard = ({ item }: { item: ListWithCount }) => (
     <TouchableOpacity
-      style={{ width: "47%", marginBottom: 16 }}
+      activeOpacity={0.9}
       onPress={() =>
         navigation.navigate("ListDetail", {
           listId: item.id,
@@ -90,30 +97,58 @@ export default function AccountScreen() {
       }
     >
       <Card
+        mode="elevated"
         style={[
-          styles.card,
+          styles.fullListCard,
           {
             backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.outlineVariant,
+            borderColor: theme.colors.outline,
           },
         ]}
-        mode="elevated"
       >
-        <Card.Content style={{ paddingVertical: 16 }}>
-          <Text
-            variant="titleMedium"
-            style={{ fontWeight: "600", color: theme.colors.onSurface }}
-            numberOfLines={2}
-          >
-            {item.title}
-          </Text>
-          <Text
-            variant="bodySmall"
-            style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}
-          >
-            {item.placesCount} place{item.placesCount === 1 ? "" : "s"}
-          </Text>
-        </Card.Content>
+        <View style={styles.fullListCardRow}>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "600",
+                color: theme.colors.onSurface,
+              }}
+              numberOfLines={1}
+            >
+              {item.title}
+            </Text>
+
+            {item.description ? (
+              <Text
+                style={{
+                  fontSize: 13,
+                  color: theme.colors.onSurfaceVariant,
+                  marginTop: 4,
+                }}
+                numberOfLines={2}
+              >
+                {item.description}
+              </Text>
+            ) : null}
+
+            <Text
+              style={{
+                marginTop: 6,
+                fontSize: 12,
+                color: theme.colors.onSurfaceVariant,
+              }}
+            >
+              {item.placesCount} place{item.placesCount === 1 ? "" : "s"}
+            </Text>
+          </View>
+
+          <IconButton
+            icon="chevron-right"
+            size={22}
+            iconColor={theme.colors.onSurfaceVariant}
+          />
+        </View>
       </Card>
     </TouchableOpacity>
   );
@@ -123,32 +158,125 @@ export default function AccountScreen() {
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       edges={["top", "left", "right"]}
     >
+      <LinearGradient
+        colors={[theme.colors.background, theme.colors.surface]}
+        style={StyleSheet.absoluteFill}
+      />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 110 }}
       >
-        {/* Header */}
-        <View style={styles.headerRow}>
-          <Text style={[styles.screenTitle, { color: theme.colors.primary }]}>
-            My Favorites
-          </Text>
-          <IconButton
-            icon="account-circle"
-            size={26}
-            iconColor={theme.colors.tertiary}
-            onPress={() => console.log("Open account section")}
-          />
+        {/* Top Header / Profile Card */}
+        <View style={styles.headerContainer}>
+          <View style={styles.headerRow}>
+            <Text
+              style={[styles.screenTitle, { color: theme.colors.onBackground }]}
+            >
+              My Stuff
+            </Text>
+            <IconButton
+              icon="cog-outline"
+              size={24}
+              iconColor={theme.colors.onBackground}
+              onPress={() => console.log("Open settings / account")}
+            />
+          </View>
+
+          {/* <Surface
+            style={[
+              styles.profileCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.outline,
+              },
+            ]}
+            mode="elevated"
+          >
+            <View style={styles.profileRow}>
+              <Avatar.Icon
+                size={56}
+                icon="account"
+                color={theme.colors.surface}
+                style={{ backgroundColor: theme.colors.tertiary }}
+              />
+              <View style={{ marginLeft: 12, flex: 1 }}>
+                <Text
+                  style={{
+                    fontWeight: "600",
+                    fontSize: 16,
+                    color: theme.colors.onSurface,
+                  }}
+                >
+                  Jordan Kulzer
+                </Text>
+                <Text
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    fontSize: 13,
+                    marginTop: 2,
+                  }}
+                >
+                  Save places you love and build lists to share later.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.profileStatsRow}>
+              <View style={styles.statPill}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    color: theme.colors.onSurfaceVariant,
+                  }}
+                >
+                  {lists.length} list{lists.length === 1 ? "" : "s"}
+                </Text>
+              </View>
+              <Button
+                mode="outlined"
+                compact
+                textColor={theme.colors.primary}
+                style={{
+                  borderColor: theme.colors.primary,
+                  borderRadius: 99,
+                  paddingHorizontal: 8,
+                  paddingVertical: 0,
+                }}
+                onPress={() => setShowCreateModal(true)}
+              >
+                New list
+              </Button>
+            </View>
+          </Surface> */}
         </View>
 
         {/* Starred Section */}
-        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-          ⭐ Starred
-        </Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text
+            style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
+          >
+            Favorites
+          </Text>
+          <Button
+            mode="text"
+            compact
+            textColor={theme.colors.primary}
+            onPress={() =>
+              navigation.navigate("FavoritesDetail", {
+                title: "Favorites",
+              })
+            }
+          >
+            View all
+          </Button>
+        </View>
+
         {starred.length === 0 ? (
           <Surface
             style={[
               styles.emptySurface,
-              { backgroundColor: theme.colors.surfaceVariant },
+              { backgroundColor: theme.colors.surface },
             ]}
           >
             <Text
@@ -159,6 +287,14 @@ export default function AccountScreen() {
             >
               You haven’t starred any restaurants yet.
             </Text>
+            <Text
+              style={{
+                color: theme.colors.onSurfaceVariant,
+                fontSize: 13,
+              }}
+            >
+              Swipe on places you love to star them.
+            </Text>
           </Surface>
         ) : (
           <FlatList
@@ -167,21 +303,39 @@ export default function AccountScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderStarred}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingBottom: 4,
+            }}
           />
         )}
 
-        <Divider style={{ marginVertical: 20, opacity: 0.3 }} />
+        <Divider style={{ marginVertical: 22, opacity: 0.15 }} />
 
         {/* Lists Section */}
-        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-          📋 Your Lists
-        </Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text
+            style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
+          >
+            Your Lists
+          </Text>
+          {lists.length > 0 && (
+            <Button
+              mode="text"
+              compact
+              textColor={theme.colors.primary}
+              onPress={() => setShowCreateModal(true)}
+            >
+              New list
+            </Button>
+          )}
+        </View>
+
         {loadingLists ? (
           <Surface
             style={[
               styles.emptySurface,
-              { backgroundColor: theme.colors.surfaceVariant },
+              { backgroundColor: theme.colors.surface },
             ]}
           >
             <Text
@@ -197,7 +351,7 @@ export default function AccountScreen() {
           <Surface
             style={[
               styles.emptySurface,
-              { backgroundColor: theme.colors.surfaceVariant },
+              { backgroundColor: theme.colors.surface },
             ]}
           >
             <Text
@@ -208,87 +362,102 @@ export default function AccountScreen() {
             >
               No lists created yet.
             </Text>
-            <Button
-              mode="contained-tonal"
-              onPress={() => setShowCreateModal(true)}
-              textColor={theme.colors.onSecondaryContainer}
+            <Text
+              style={{
+                color: theme.colors.onSurfaceVariant,
+                fontSize: 13,
+                marginBottom: 14,
+              }}
             >
-              Create Your First List
+              Start a list for date nights, brunch spots, or travel ideas.
+            </Text>
+            <Button
+              mode="contained"
+              onPress={() => setShowCreateModal(true)}
+              textColor={theme.colors.surface}
+              style={{
+                backgroundColor: theme.colors.tertiary,
+                borderRadius: 999,
+                paddingHorizontal: 14,
+              }}
+            >
+              Create your first list
             </Button>
           </Surface>
         ) : (
           <FlatList
             data={lists}
             renderItem={renderListCard}
-            numColumns={2}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
-            columnWrapperStyle={{
-              justifyContent: "space-between",
-              paddingHorizontal: 16,
-            }}
+            contentContainerStyle={{ paddingHorizontal: 16 }}
           />
         )}
 
-        {/* Account Info Section */}
-        <Divider style={{ marginVertical: 20, opacity: 0.3 }} />
-        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-          👤 Account
+        <Divider style={{ marginVertical: 22, opacity: 0.15 }} />
+
+        {/* Account / Logout Section */}
+        <Text
+          style={[
+            styles.sectionTitle,
+            { color: theme.colors.onSurface, marginLeft: 16 },
+          ]}
+        >
+          Account
         </Text>
         <Surface
           style={[
             styles.accountCard,
             {
               backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.outlineVariant,
+              borderColor: theme.colors.outline,
             },
           ]}
           mode="flat"
         >
           <View style={styles.accountRow}>
             <Avatar.Icon
-              size={50}
-              icon="account"
-              color="white"
-              style={{ backgroundColor: theme.colors.tertiary }}
+              size={46}
+              icon="email-outline"
+              color={theme.colors.surface}
+              style={{ backgroundColor: theme.colors.primary }}
             />
-            <View style={{ marginLeft: 12 }}>
+            <View style={{ marginLeft: 10, flex: 1 }}>
               <Text
-                style={{ fontWeight: "600", color: theme.colors.onSurface }}
+                style={{
+                  fontWeight: "600",
+                  color: theme.colors.onSurface,
+                  fontSize: 15,
+                }}
               >
-                Jordan Kulzer
+                Account & Settings
               </Text>
-              <Text style={{ color: theme.colors.onSurfaceVariant }}>
-                View and manage profile
+              <Text
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  fontSize: 13,
+                  marginTop: 2,
+                }}
+              >
+                Manage your profile and sign out.
               </Text>
             </View>
           </View>
           <Button
             icon="logout"
             mode="outlined"
-            textColor={theme.colors.tertiary}
-            style={{ marginTop: 10, borderColor: theme.colors.tertiary }}
+            textColor={theme.colors.secondary}
+            style={{
+              marginTop: 10,
+              borderColor: theme.colors.secondary,
+              borderRadius: 999,
+            }}
             onPress={() => console.log("Logout pressed")}
           >
-            Log Out
+            Log out
           </Button>
         </Surface>
       </ScrollView>
-
-      {/* Floating Button */}
-      <FAB
-        icon="plus"
-        label="New List"
-        style={[
-          styles.fab,
-          {
-            backgroundColor: theme.colors.tertiary,
-            shadowColor: theme.colors.tertiary,
-          },
-        ]}
-        color="white"
-        onPress={() => setShowCreateModal(true)}
-      />
 
       <CreateListModal
         visible={showCreateModal}
@@ -300,67 +469,119 @@ export default function AccountScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 6,
+  },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    marginTop: 8,
   },
   screenTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "700",
+  },
+  profileCard: {
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+  },
+  profileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  profileStatsRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  statPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 6,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-    marginLeft: 16,
-    marginTop: 20,
-    marginBottom: 8,
   },
   starredItem: {
     marginRight: 12,
-    alignItems: "center",
+    borderRadius: 16,
+    overflow: "hidden",
   },
   starredImage: {
-    width: 110,
+    width: 130,
     height: 110,
-    borderRadius: 12,
+  },
+  starredOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: "rgba(0,0,0,0.45)",
   },
   starredLabel: {
-    marginTop: 6,
     fontSize: 13,
-    fontWeight: "500",
-    textAlign: "center",
+    fontWeight: "600",
+  },
+  listCardWrapper: {
+    width: "47%",
+    marginBottom: 16,
   },
   card: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  listCardContent: {
+    paddingVertical: 14,
+  },
+  listMetaRow: {
+    marginTop: 6,
   },
   emptySurface: {
     marginHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 20,
     alignItems: "center",
   },
   emptyText: {
     fontSize: 15,
     textAlign: "center",
-    marginBottom: 10,
+    marginBottom: 6,
   },
   accountCard: {
     marginHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
     borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 26,
   },
   accountRow: {
     flexDirection: "row",
     alignItems: "center",
   },
-  fab: {
-    position: "absolute",
-    right: 20,
-    bottom: 20,
+  fullListCard: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  fullListCardRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 });

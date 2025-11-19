@@ -14,8 +14,7 @@ import { createList } from "../utils/listsApi";
 interface Props {
   visible: boolean;
   onDismiss: () => void;
-  /** Called after a list is successfully created so parent can reload */
-  onCreated: () => void;
+  onCreated: (newList: any) => void; // <— return the created list
 }
 
 export default function CreateListModal({
@@ -33,12 +32,12 @@ export default function CreateListModal({
 
     try {
       setLoading(true);
-      await createList(trimmed);
+      const newList = await createList(trimmed);
       setName("");
-      onCreated();
+      onCreated(newList);
       onDismiss();
     } catch (err) {
-      console.error("❌ CreateListModal: failed to create list:", err);
+      console.error("❌ failed to create list:", err);
     } finally {
       setLoading(false);
     }

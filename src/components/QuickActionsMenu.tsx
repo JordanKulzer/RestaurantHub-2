@@ -1,3 +1,4 @@
+// src/components/QuickActionsMenu.tsx
 import React, { useEffect, useState } from "react";
 import { Share, View } from "react-native";
 import {
@@ -8,13 +9,16 @@ import {
   useTheme,
   Icon,
 } from "react-native-paper";
-import { getLists, addToList } from "../utils/listsApi";
+import { addFavorite, removeFavorite } from "../utils/favoritesApis";
+import { getLists, addToList, removeFromList } from "../utils/listsApi";
+import { toPointer } from "../utils/restaurantPointers";
+import { supabase } from "../utils/supabaseClient";
 
 interface Props {
   restaurant: any;
   isFavorite: boolean;
-  onToggleFavorite: (r: any) => void;
-  onCreateNewList: () => void;
+  onFavoriteChange?: () => void;
+  onCreateNewList: (onCreated: (newList: any) => void) => void;
 }
 
 type ListRow = {
@@ -22,30 +26,66 @@ type ListRow = {
   title: string;
   description?: string | null;
   created_at: string;
+  placesCount?: number;
 };
+
+type MembershipMap = Record<
+  string,
+  {
+    itemId: string;
+  }
+>;
 
 export default function QuickActionsMenu({
   restaurant,
   isFavorite,
-  onToggleFavorite,
+  onFavoriteChange,
   onCreateNewList,
 }: Props) {
   const theme = useTheme();
   const [visible, setVisible] = useState(false);
   const [lists, setLists] = useState<ListRow[]>([]);
+  const [memberships, setMemberships] = useState<MembershipMap>({});
+  const [loadingLists, setLoadingLists] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      loadLists();
+      loadListsAndMemberships();
     }
-  }, [visible]);
+  }, [visible, restaurant?.id]);
 
   const openMenu = () => setVisible(true);
   const closeMenu = () => setVisible(false);
 
-  const loadLists = async () => {
-    const data = await getLists();
-    setLists(data);
+  const loadListsAndMemberships = async () => {
+    try {
+      setLoadingLists(true);
+      const data = await getLists();
+      setLists(data);
+
+      const pointer = toPointer(restaurant);
+
+      const { data: listItems, error } = await supabase
+        .from("list_items")
+        .select("id, list_id")
+        .eq("restaurant_id", pointer.id);
+
+      if (error) {
+        console.error("❌ list_items membership query failed:", error);
+        setMemberships({});
+        return;
+      }
+
+      const map: MembershipMap = {};
+      (listItems ?? []).forEach((row: any) => {
+        map[row.list_id] = { itemId: row.id };
+      });
+      setMemberships(map);
+    } catch (e) {
+      console.error("❌ getLists/memberships failed:", e);
+    } finally {
+      setLoadingLists(false);
+    }
   };
 
   const handleShare = async () => {
@@ -61,13 +101,66 @@ export default function QuickActionsMenu({
     }
   };
 
-  const handleAddToList = async (listId: string) => {
-    await addToList(listId, restaurant);
-    closeMenu();
+  const handleToggleFavorite = async () => {
+    try {
+      const pointer = toPointer(restaurant);
+      if (isFavorite) {
+        await removeFavorite(pointer.id);
+      } else {
+        await addFavorite(pointer);
+      }
+      onFavoriteChange?.();
+    } catch (e) {
+      console.error("❌ favorite toggle failed:", e);
+    }
   };
 
-  const renderIcon = (name: string) => (
-    <Icon source={name} color={theme.colors.tertiary} size={20} />
+  const handleToggleListItem = async (listId: string) => {
+    const pointer = toPointer(restaurant);
+    const membership = memberships[listId];
+
+    try {
+      if (membership) {
+        // Already in this list → remove
+        await removeFromList(membership.itemId);
+        setMemberships((prev) => {
+          const copy = { ...prev };
+          delete copy[listId];
+          return copy;
+        });
+      } else {
+        // Not in this list → add
+        const inserted = await addToList(listId, pointer);
+        setMemberships((prev) => ({
+          ...prev,
+          [listId]: { itemId: inserted.id },
+        }));
+      }
+      closeMenu();
+    } catch (e) {
+      console.error("❌ add/remove list failed:", e);
+    }
+  };
+
+  const handleCreateNewList = () => {
+    const pointer = toPointer(restaurant);
+
+    closeMenu();
+    onCreateNewList(async (newList) => {
+      try {
+        const inserted = await addToList(newList.id, pointer);
+        setMemberships((prev) => ({
+          ...prev,
+          [newList.id]: { itemId: inserted.id },
+        }));
+      } catch (e) {
+        console.error("❌ addToList (new list) failed:", e);
+      }
+    });
+  };
+
+  const renderIcon = (name: string, color: string) => (
+    <Icon source={name} color={color} size={20} />
   );
 
   return (
@@ -96,7 +189,7 @@ export default function QuickActionsMenu({
         shadowRadius: 6,
         shadowOffset: { width: 0, height: 2 },
         elevation: 5,
-        width: 220,
+        width: 240,
       }}
       anchorPosition="bottom"
     >
@@ -113,14 +206,16 @@ export default function QuickActionsMenu({
         </Text>
       </View>
 
-      {/* ❤️ Add / Remove from Favorites */}
+      {/* ❤️ Favorites */}
       <Menu.Item
-        onPress={() => {
-          // closeMenu();
-          onToggleFavorite(restaurant);
-        }}
+        onPress={handleToggleFavorite}
         title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-        leadingIcon={() => renderIcon(isFavorite ? "heart" : "heart-outline")}
+        leadingIcon={() =>
+          renderIcon(
+            isFavorite ? "heart" : "heart-outline",
+            theme.colors.tertiary
+          )
+        }
         titleStyle={{ color: theme.colors.tertiary }}
         rippleColor={theme.colors.tertiary + "22"}
       />
@@ -131,12 +226,9 @@ export default function QuickActionsMenu({
 
       {/* ➕ Create New List */}
       <Menu.Item
-        onPress={() => {
-          closeMenu();
-          onCreateNewList();
-        }}
+        onPress={handleCreateNewList}
         title="Create New List"
-        leadingIcon={() => renderIcon("plus")}
+        leadingIcon={() => renderIcon("plus", theme.colors.tertiary)}
         titleStyle={{ color: theme.colors.tertiary }}
         rippleColor={theme.colors.tertiary + "22"}
       />
@@ -161,23 +253,53 @@ export default function QuickActionsMenu({
               Your Lists
             </Text>
           </View>
-          {lists.map((l) => (
+
+          {loadingLists ? (
             <Menu.Item
-              key={l.id}
-              onPress={() => handleAddToList(l.id)}
-              title={`Add to ${l.title}`}
-              leadingIcon={() => renderIcon("playlist-plus")}
-              titleStyle={{ color: theme.colors.tertiary }}
-              rippleColor={theme.colors.tertiary + "22"}
+              title="Loading lists…"
+              disabled
+              titleStyle={{ color: theme.colors.onSurfaceVariant }}
+              leadingIcon={() =>
+                renderIcon("clock-outline", theme.colors.tertiary)
+              }
             />
-          ))}
+          ) : (
+            lists.map((l) => {
+              const membership = memberships[l.id];
+              const isInList = !!membership;
+
+              return (
+                <Menu.Item
+                  key={l.id}
+                  onPress={() => handleToggleListItem(l.id)}
+                  title={
+                    isInList ? `Remove from ${l.title}` : `Add to ${l.title}`
+                  }
+                  leadingIcon={() =>
+                    renderIcon(
+                      isInList ? "playlist-remove" : "playlist-plus",
+                      isInList ? theme.colors.secondary : theme.colors.tertiary
+                    )
+                  }
+                  titleStyle={
+                    isInList
+                      ? { color: theme.colors.secondary }
+                      : { color: theme.colors.tertiary }
+                  }
+                  rippleColor={theme.colors.tertiary + "22"}
+                />
+              );
+            })
+          )}
         </>
       ) : (
         <Menu.Item
           title="No lists available"
           disabled
           titleStyle={{ color: theme.colors.tertiary + "88" }}
-          leadingIcon={() => renderIcon("alert-circle-outline")}
+          leadingIcon={() =>
+            renderIcon("alert-circle-outline", theme.colors.tertiary)
+          }
         />
       )}
 
@@ -189,7 +311,7 @@ export default function QuickActionsMenu({
       <Menu.Item
         onPress={handleShare}
         title="Share"
-        leadingIcon={() => renderIcon("share-variant")}
+        leadingIcon={() => renderIcon("share-variant", theme.colors.tertiary)}
         titleStyle={{ color: theme.colors.tertiary }}
         rippleColor={theme.colors.tertiary + "22"}
       />

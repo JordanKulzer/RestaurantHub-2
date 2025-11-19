@@ -15,20 +15,28 @@ import {
   useTheme,
   IconButton,
   MD3Theme,
+  ProgressBar,
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   RestaurantDetailModal,
   DropdownModal,
   QuickActionsMenu,
+  UpgradeModal,
 } from "../components";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import Toast from "react-native-toast-message";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../utils/supabaseClient";
 import { getLists } from "../utils/listsApi";
-import { fetchYelpDetails, fetchYelpRestaurants } from "../utils/yelpApi";
-import * as Location from "expo-location";
+import { fetchGoogleDiscovery } from "../utils/fetchGoogleDiscovery";
+import { fetchRestaurantDetails } from "../utils/placesApi";
+import { HomeRestaurant } from "../types/homeRestaurant";
+import { useIsFocused } from "@react-navigation/native";
+import { getFavorites } from "../utils/favoritesApis";
+import { RestaurantPointer } from "../utils/restaurantPointers";
+import { getLocationCached } from "../utils/locationHelper";
 
 type Phase = "choose-source" | "filters" | "eliminate";
 type ShuffleSource =
@@ -41,6 +49,8 @@ type ShuffleSource =
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const CARD_PHOTO_HEIGHT = SCREEN_HEIGHT * 0.32;
+
+const FREE_DAILY_SHUFFLES = 10;
 
 export default function ShuffleScreen() {
   const theme = useTheme();
@@ -61,9 +71,10 @@ export default function ShuffleScreen() {
   const [distance, setDistance] = useState("");
   const [numberDisplayed, setNumberDisplayed] = useState("5");
 
-  // DATA
-  const [restaurants, setRestaurants] = useState<any[]>([]);
-  const [favorites, setFavorites] = useState<any[]>([]);
+  // DATA FOR CURRENT ROUND
+  const [restaurants, setRestaurants] = useState<HomeRestaurant[]>([]);
+  const [favorites, setFavorites] = useState<HomeRestaurant[]>([]);
+  const [likedPool, setLikedPool] = useState<HomeRestaurant[]>([]);
   const [noResults, setNoResults] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -72,8 +83,19 @@ export default function ShuffleScreen() {
   const [listsExpanded, setListsExpanded] = useState(false);
 
   // MODAL
-  const [selectedRestaurant, setSelectedRestaurant] = useState<any>(null);
+  const [selectedRestaurant, setSelectedRestaurant] =
+    useState<HomeRestaurant | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+
+  // UPGRADE
+  const [shuffleCount, setShuffleCount] = useState(0);
+  const [shuffleLastResetDate, setShuffleLastResetDate] = useState<string>("");
+  const [showShuffleUpgradeModal, setShowShuffleUpgradeModal] = useState(false);
+  const [isPremium, setIsPremium] = useState(false); // mirror HomeScreen
+
+  // FAVORITES
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const isFocused = useIsFocused();
 
   const accent = theme.colors.tertiary;
   const surface = theme.colors.surface;
@@ -97,18 +119,16 @@ export default function ShuffleScreen() {
     { label: "10", value: "10" },
   ];
 
-  // -------------------------
-  // LOCATION INIT
-  // -------------------------
   useEffect(() => {
     const request = async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        console.warn("⚠️ Location not granted");
-        return;
+      await AsyncStorage.multiRemove(["shuffleCount", "shuffleLastResetDate"]); // UNCOMMENT TO RESET DAILY COUNTER
+
+      try {
+        const loc = await getLocationCached();
+        setLocation({ lat: loc.latitude, lon: loc.longitude });
+      } catch (e) {
+        console.warn("⚠️ ShuffleScreen could not get location:", e);
       }
-      const { coords } = await Location.getCurrentPositionAsync({});
-      setLocation({ lat: coords.latitude, lon: coords.longitude });
     };
     request();
   }, []);
@@ -117,17 +137,114 @@ export default function ShuffleScreen() {
     const loadLists = async () => {
       try {
         const lists = await getLists();
-        setPreloadedLists(lists.map((l) => ({ ...l, selected: false })));
+        setPreloadedLists(
+          lists.map((l: any) => ({
+            ...l,
+            selected: false,
+          }))
+        );
       } catch (e) {
-        console.error("❌ getLists failed:", e);
+        console.error("getLists failed:", e);
       }
     };
     loadLists();
   }, []);
 
-  // -------------------------
-  // HELPERS
-  // -------------------------
+  useEffect(() => {
+    const checkShuffleDailyReset = async () => {
+      const today = new Date().toDateString();
+      const stored = await AsyncStorage.getItem("shuffleLastResetDate");
+      const storedCount = await AsyncStorage.getItem("shuffleCount");
+
+      if (stored !== today) {
+        // New day — reset
+        setShuffleCount(0);
+        setShuffleLastResetDate(today);
+        await AsyncStorage.setItem("shuffleLastResetDate", today);
+        await AsyncStorage.setItem("shuffleCount", "0");
+      } else {
+        // Load existing
+        const parsed = parseInt(storedCount || "0", 10);
+        const safe = Math.min(parsed, FREE_DAILY_SHUFFLES);
+        setShuffleCount(safe);
+        setShuffleLastResetDate(today);
+      }
+    };
+
+    checkShuffleDailyReset();
+  }, []);
+
+  const refreshFavoriteIds = async () => {
+    try {
+      const favs = await getFavorites();
+      setFavoriteIds(new Set(favs.map((f) => f.id)));
+    } catch (e) {
+      console.error("Error loading favorites:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (!isFocused) return;
+    refreshFavoriteIds();
+  }, [isFocused]);
+
+  function upgradeLikedEntry(raw: any): HomeRestaurant {
+    return {
+      id: raw.id ?? raw.placeId ?? raw.restaurant_id ?? "",
+      source: raw.source ?? raw.restaurant_source ?? "google",
+
+      name: raw.name ?? raw.restaurant_name ?? "Unknown",
+      address: raw.address ?? raw.restaurant_address ?? null,
+
+      rating: typeof raw.rating === "number" ? raw.rating : 0,
+      reviewCount: raw.reviewCount ?? null,
+      price: raw.price ?? null,
+
+      distanceMiles: raw.distanceMiles ?? null,
+
+      photos: Array.isArray(raw.photos)
+        ? raw.photos
+        : raw.image
+        ? [raw.image]
+        : [],
+
+      googleMapsUrl: raw.googleMapsUrl ?? null,
+      yelpUrl: raw.yelpUrl ?? null,
+
+      image:
+        raw.image ??
+        (Array.isArray(raw.photos) && raw.photos.length > 0
+          ? raw.photos[0]
+          : null),
+    };
+  }
+
+  useEffect(() => {
+    if (!isFocused) return;
+
+    const loadLiked = async () => {
+      try {
+        const stored = await AsyncStorage.getItem("likedRestaurants");
+        if (!stored) {
+          setLikedPool([]);
+          return;
+        }
+        const parsed = JSON.parse(stored);
+
+        if (!Array.isArray(parsed)) {
+          setLikedPool([]);
+          return;
+        }
+        const upgraded = parsed.map((item: any) => upgradeLikedEntry(item));
+
+        setLikedPool(upgraded);
+      } catch (e) {
+        console.error("Error loading likedRestaurants:", e);
+      }
+    };
+
+    loadLiked();
+  }, [isFocused]);
 
   const handleBackToSource = () => {
     setRestaurants([]);
@@ -137,45 +254,58 @@ export default function ShuffleScreen() {
     setShuffleLabel("");
   };
 
-  const handleToggleFavorite = (r: any) => {
-    setFavorites((prev) => {
-      const exists = prev.some((f) => f.id === r.id);
-      return exists ? prev.filter((f) => f.id !== r.id) : [...prev, r];
-    });
+  const incrementShuffleCount = async () => {
+    const newCount = Math.min(shuffleCount + 1, FREE_DAILY_SHUFFLES);
+
+    if (!isPremium && newCount > FREE_DAILY_SHUFFLES) {
+      setShowShuffleUpgradeModal(true);
+      return;
+    }
+
+    setShuffleCount(newCount);
+    await AsyncStorage.setItem("shuffleCount", newCount.toString());
+
+    if (!isPremium && newCount === FREE_DAILY_SHUFFLES) {
+      setShowShuffleUpgradeModal(true);
+    }
   };
 
-  // Normalize Yelp → app restaurant shape
-  function mapYelpToRestaurant(details: any, fallbackRow: any = {}) {
-    const categoriesArray = Array.isArray(details?.categories)
-      ? details.categories
-      : Array.isArray(fallbackRow?.categories)
-      ? fallbackRow.categories
-      : [];
+  const mapGoogleDetailsToRestaurant = (
+    details: any,
+    fallback?: Partial<HomeRestaurant>
+  ): HomeRestaurant => {
+    const primaryImage =
+      Array.isArray(details?.photos) && details.photos.length > 0
+        ? details.photos[0]
+        : (fallback as any)?.image ?? (fallback as any)?.photo ?? null;
 
     return {
-      id: details?.id ?? fallbackRow.restaurant_id,
-      name: details?.name ?? fallbackRow.restaurant_name,
+      id: details?.id ?? fallback?.id ?? "",
+      source: "google",
+      name: details?.name ?? fallback?.name ?? "Unknown",
       address:
-        details?.location?.display_address?.join(", ") ??
-        fallbackRow.restaurant_address,
-      rating: details?.rating ?? fallbackRow.rating ?? 0,
-      photo:
-        details?.photos?.[0] ??
-        fallbackRow?.photo ??
-        "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg",
-      distance: details?.distance ?? fallbackRow.distance ?? null,
-      types: categoriesArray.map((c: any) => c.title ?? c),
-      hours: Array.isArray(details?.hours) ? details.hours : [],
-      phone: details?.display_phone ?? null,
-      website: details?.url ?? null,
-      // if your Yelp wrapper sets distanceMiles, keep it
-      distanceMiles: fallbackRow.distanceMiles ?? details?.distanceMiles,
-    };
-  }
-
-  // -------------------------
-  // YELP LOADERS
-  // -------------------------
+        details?.address ??
+        details?.formatted_address ??
+        fallback?.address ??
+        "",
+      rating:
+        typeof details?.rating === "number"
+          ? details.rating
+          : fallback?.rating ?? 0,
+      distanceMiles:
+        typeof fallback?.distanceMiles === "number"
+          ? fallback.distanceMiles
+          : null,
+      googleUrl: details?.googleUrl ?? details?.url ?? null,
+      photos: Array.isArray(details?.photos) ? details.photos : [],
+      hours: details?.hours ?? [],
+      isOpen:
+        typeof details?.isOpen === "boolean"
+          ? details.isOpen
+          : fallback?.isOpen ?? null,
+      image: primaryImage,
+    } as HomeRestaurant & { image?: string | null };
+  };
 
   async function loadRandomNearbyRestaurants() {
     if (!location) {
@@ -186,19 +316,21 @@ export default function ShuffleScreen() {
       });
       return;
     }
+
     setLoading(true);
     setNoResults(false);
 
     try {
-      const results = await fetchYelpRestaurants(
-        location.lat,
-        location.lon,
-        "restaurants",
-        []
-      );
+      const results =
+        (await fetchGoogleDiscovery({
+          latitude: location.lat,
+          longitude: location.lon,
+          filters: [],
+        })) || [];
 
-      const shuffled = (results ?? []).sort(() => Math.random() - 0.5);
-      const subset = shuffled.slice(0, 5);
+      const limit = 5;
+      const shuffled = results.sort(() => Math.random() - 0.5);
+      const subset = shuffled.slice(0, limit);
 
       setRestaurants(subset);
       if (!subset.length) {
@@ -208,7 +340,7 @@ export default function ShuffleScreen() {
         setPhase("eliminate");
       }
     } catch (e) {
-      console.error("❌ Yelp random fetch failed:", e);
+      console.error("Google discovery error (surprise):", e);
       Toast.show({
         type: "error",
         text1: "Error",
@@ -227,29 +359,56 @@ export default function ShuffleScreen() {
 
     const { data, error } = await supabase
       .from("list_items")
-      .select("*")
+      .select(
+        `
+        id,
+        list_id,
+        restaurant_id,
+        restaurant_name,
+        restaurant_address,
+        restaurant_source
+      `
+      )
       .in("list_id", listIds);
 
     if (error || !data) {
-      console.error("❌ list_items error:", error);
-      return [];
+      console.error("list_items error:", error);
+      return [] as HomeRestaurant[];
     }
 
-    const unique: Record<string, any> = {};
-    data.forEach((item) => {
-      unique[item.restaurant_id] = item;
+    // de-dupe by restaurant_id
+    const byId: Record<string, any> = {};
+    data.forEach((row: any) => {
+      if (!byId[row.restaurant_id]) {
+        byId[row.restaurant_id] = row;
+      }
     });
-    const rows = Object.values(unique);
+    const rows = Object.values(byId) as any[];
 
     const enriched = await Promise.all(
-      rows.map(async (row: any) => {
+      rows.map(async (row) => {
         try {
-          const details = await fetchYelpDetails(row.restaurant_id);
-          return mapYelpToRestaurant(details, row);
+          const details = await fetchRestaurantDetails(row.restaurant_id);
+          return mapGoogleDetailsToRestaurant(details, {
+            id: row.restaurant_id,
+            name: row.restaurant_name,
+            address: row.restaurant_address,
+            source: "google",
+          } as Partial<HomeRestaurant>);
         } catch (err) {
-          console.error("❌ fetchYelpDetails failed for list item:", err);
-          // fall back to whatever we have in row
-          return mapYelpToRestaurant({}, row);
+          console.error("Google details failed for list item:", err);
+          return {
+            id: row.restaurant_id,
+            source: "google",
+            name: row.restaurant_name ?? "Unknown",
+            address: row.restaurant_address ?? "",
+            rating: 0,
+            distanceMiles: null,
+            googleUrl: null,
+            photos: [],
+            hours: [],
+            isOpen: null,
+          } as HomeRestaurant;
         }
       })
     );
@@ -257,42 +416,100 @@ export default function ShuffleScreen() {
     return enriched;
   }
 
-  // -------------------------
-  // SOURCE SELECTOR
-  // -------------------------
-
   async function handleSelectSource(key: ShuffleSource) {
     setShuffleSource(key);
     setNoResults(false);
 
     if (key === "favorites") {
       setShuffleLabel("Shuffle Through Your Favorites");
-      setRestaurants([]);
-      setNoResults(true);
-      setPhase("eliminate");
+      setLoading(true);
+
+      try {
+        const favPointers = await getFavorites();
+        if (!favPointers.length) {
+          setRestaurants([]);
+          setNoResults(true);
+          setPhase("eliminate");
+          return;
+        }
+
+        const enriched = await Promise.all(
+          favPointers.map(async (ptr: RestaurantPointer) => {
+            try {
+              const details = await fetchRestaurantDetails(ptr.id);
+              return mapGoogleDetailsToRestaurant(details, {
+                id: ptr.id,
+                name: ptr.name,
+                address: ptr.address ?? "",
+                source: ptr.source,
+              });
+            } catch (err) {
+              console.error("Details failed for favorite:", err);
+              return {
+                id: ptr.id,
+                source: ptr.source,
+                name: ptr.name,
+                address: ptr.address ?? "",
+                rating: 0,
+                distanceMiles: null,
+                googleUrl: null,
+                photos: [],
+                hours: [],
+                isOpen: null,
+              } as HomeRestaurant;
+            }
+          })
+        );
+
+        setRestaurants(enriched);
+        incrementShuffleCount();
+        setPhase("eliminate");
+        setNoResults(false);
+      } catch (e) {
+        console.error("favorites load error:", e);
+        setRestaurants([]);
+        setNoResults(true);
+        setPhase("eliminate");
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
     if (key === "liked") {
-      setShuffleLabel("Shuffle Through Your Liked Restaurants");
-      setRestaurants([]);
-      setNoResults(true);
+      setShuffleLabel("Shuffle Through Liked");
+
+      if (!likedPool.length) {
+        setRestaurants([]);
+        setNoResults(true);
+        setPhase("eliminate");
+        return;
+      }
+
+      setRestaurants(likedPool);
+      incrementShuffleCount();
       setPhase("eliminate");
+      setNoResults(false);
+      return;
+    }
+
+    if (key === "lists") {
+      setShuffleLabel("Choose Lists");
+      setPhase("choose-source");
       return;
     }
 
     if (key === "filters") {
-      setShuffleLabel("Shuffle Through Filtered Results");
+      setShuffleLabel("Filter Restaurants");
       setPhase("filters");
       return;
     }
 
     if (key === "surprise") {
-      await loadRandomNearbyRestaurants();
+      incrementShuffleCount();
+      loadRandomNearbyRestaurants();
       return;
     }
-
-    // "lists" is handled by the expandable Lists card (no-op here)
   }
 
   const toggleListsExpand = () => {
@@ -309,11 +526,13 @@ export default function ShuffleScreen() {
     try {
       const merged = await loadRestaurantsFromLists(listIds, listNames);
       setRestaurants(merged);
-
       if (!merged.length) setNoResults(true);
-      else setPhase("eliminate");
+      else {
+        setPhase("eliminate");
+        incrementShuffleCount();
+      }
     } catch (e) {
-      console.error("❌ loadRestaurantsFromLists failed:", e);
+      console.error("loadRestaurantsFromLists failed:", e);
       Toast.show({
         type: "error",
         text1: "Error loading list items",
@@ -325,7 +544,7 @@ export default function ShuffleScreen() {
   };
 
   // -------------------------
-  // FILTER MODE SHUFFLE (Yelp + client filtering)
+  // FILTER MODE SHUFFLE (Google + client filtering)
   // -------------------------
 
   const handleShuffle = async () => {
@@ -342,27 +561,22 @@ export default function ShuffleScreen() {
     setNoResults(false);
 
     try {
-      const results = await fetchYelpRestaurants(
-        location.lat,
-        location.lon,
-        "restaurants",
-        categories
-      );
-
-      const raw = results ?? [];
+      const results =
+        (await fetchGoogleDiscovery({
+          latitude: location.lat,
+          longitude: location.lon,
+          filters: categories,
+        })) || [];
 
       const minRating = rating ? Number(rating) : 0;
       const maxDistance = distance ? Number(distance) : null;
 
-      const filtered = raw.filter((r: any) => {
+      const filtered = results.filter((r) => {
         const meetsRating =
           !minRating || (typeof r.rating === "number" && r.rating >= minRating);
 
-        const distMiles = r.distanceMiles
-          ? Number(r.distanceMiles)
-          : r.distance
-          ? Number(r.distance) / 1609.34 // if Yelp gives meters
-          : null;
+        const distMiles =
+          typeof r.distanceMiles === "number" ? r.distanceMiles : null;
 
         const meetsDistance =
           !maxDistance || (distMiles !== null && distMiles <= maxDistance);
@@ -376,13 +590,16 @@ export default function ShuffleScreen() {
 
       setRestaurants(subset);
       if (!subset.length) setNoResults(true);
-      else setPhase("eliminate");
+      else {
+        setPhase("eliminate");
+        incrementShuffleCount();
+      }
     } catch (err) {
-      console.error("❌ Yelp filter fetch error:", err);
+      console.error("Google discovery error (filters):", err);
       Toast.show({
         type: "error",
-        text1: "Location Error",
-        text2: "Please enable GPS or try again.",
+        text1: "Error loading restaurants",
+        text2: "Please check your connection and try again.",
       });
     }
 
@@ -400,7 +617,7 @@ export default function ShuffleScreen() {
     if (remaining.length === 1) {
       Toast.show({
         type: "success",
-        text1: `Winner: ${remaining[0].name}!`,
+        text1: `Winner: ${remaining[0].name}`,
       });
     }
   };
@@ -415,16 +632,17 @@ export default function ShuffleScreen() {
   };
 
   // -------------------------
-  // VIEW DETAILS (Yelp)
+  // VIEW DETAILS (Google)
   // -------------------------
 
-  const handleViewDetails = async (item: any) => {
+  const handleViewDetails = async (item: HomeRestaurant) => {
     try {
-      const details = await fetchYelpDetails(item.id);
-      setSelectedRestaurant(mapYelpToRestaurant(details, item));
+      const details = await fetchRestaurantDetails(item.id);
+      const merged = mapGoogleDetailsToRestaurant(details, item);
+      setSelectedRestaurant(merged);
       setShowDetails(true);
     } catch (e) {
-      console.error("❌ Yelp details error:", e);
+      console.error("Google details error:", e);
       Toast.show({
         type: "error",
         text1: "Error",
@@ -450,23 +668,26 @@ export default function ShuffleScreen() {
       <View style={styles.headerTitleRow}>
         <View style={[styles.colorBar, { backgroundColor: accent }]} />
         <Text style={[styles.header, { color: theme.colors.onSurface }]}>
-          {shuffleLabel || "Elimination Round"}
+          {String(shuffleLabel || "Elimination Round")}
         </Text>
       </View>
     </View>
   );
 
-  const safeSubtitle = (item: any) => {
+  const safeSubtitle = (item: HomeRestaurant) => {
     const ratingText =
       typeof item.rating === "number" ? item.rating.toFixed(1) : "N/A";
     const addr = item.address || "";
     if (addr) return `${addr} • ${ratingText}`;
-    return `⭐ ${ratingText}`;
+    return `Rating: ${ratingText}`;
   };
 
-  // -------------------------
-  // RENDER
-  // -------------------------
+  const getCardImage = (item: any) => {
+    return item.image ?? item.photo ?? item.photos?.[0] ?? null;
+  };
+
+  const shufflesRemaining = Math.max(0, FREE_DAILY_SHUFFLES - shuffleCount);
+  const showShuffleCounter = !isPremium && shufflesRemaining <= 10;
 
   return (
     <SafeAreaView
@@ -477,7 +698,6 @@ export default function ShuffleScreen() {
         colors={[theme.colors.background, surface]}
         style={StyleSheet.absoluteFill}
       />
-
       {/* CHOOSE SOURCE */}
       {phase === "choose-source" && shuffleSource === null && (
         <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
@@ -491,6 +711,46 @@ export default function ShuffleScreen() {
           >
             Restaurant Shuffler
           </Text>
+          {showShuffleCounter && (
+            <View style={styles.shuffleCounterContainer}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  marginBottom: 4,
+                }}
+              >
+                <Text
+                  style={[
+                    styles.shuffleCounterText,
+                    { color: theme.colors.onSurface },
+                  ]}
+                >
+                  {shufflesRemaining} shuffles remaining today
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() => setShowShuffleUpgradeModal(true)}
+                >
+                  <Text
+                    style={{ color: theme.colors.primary, fontWeight: "600" }}
+                  >
+                    Upgrade ✨
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <ProgressBar
+                progress={shuffleCount / FREE_DAILY_SHUFFLES}
+                color={
+                  shufflesRemaining <= 5
+                    ? theme.colors.error
+                    : theme.colors.primary
+                }
+                style={{ height: 4, borderRadius: 2 }}
+              />
+            </View>
+          )}
 
           <Text
             style={{
@@ -505,15 +765,7 @@ export default function ShuffleScreen() {
           {/* FAVORITES */}
           <TouchableOpacity
             onPress={() => handleSelectSource("favorites")}
-            style={{
-              marginBottom: 10,
-              borderRadius: 14,
-              borderWidth: StyleSheet.hairlineWidth,
-              paddingVertical: 20,
-              paddingHorizontal: 18,
-              backgroundColor: surface,
-              borderColor: theme.colors.outlineVariant,
-            }}
+            style={dyn.sourceButton(surface, theme)}
           >
             <View
               style={{
@@ -530,15 +782,7 @@ export default function ShuffleScreen() {
           {/* LIKED */}
           <TouchableOpacity
             onPress={() => handleSelectSource("liked")}
-            style={{
-              marginBottom: 10,
-              borderRadius: 14,
-              borderWidth: StyleSheet.hairlineWidth,
-              paddingVertical: 20,
-              paddingHorizontal: 18,
-              backgroundColor: surface,
-              borderColor: theme.colors.outlineVariant,
-            }}
+            style={dyn.sourceButton(surface, theme)}
           >
             <View
               style={{
@@ -659,7 +903,6 @@ export default function ShuffleScreen() {
                   )}
                 />
 
-                {/* Footer Buttons */}
                 {preloadedLists.length > 0 && (
                   <View
                     style={{
@@ -679,8 +922,8 @@ export default function ShuffleScreen() {
                           });
                           return;
                         }
-                        const ids = chosen.map((c) => c.id);
-                        const names = chosen.map((c) => c.title);
+                        const ids = chosen.map((c: any) => c.id);
+                        const names = chosen.map((c: any) => c.title);
                         handleListsSelected(ids, names);
                       }}
                     >
@@ -706,15 +949,7 @@ export default function ShuffleScreen() {
           {/* FILTERS */}
           <TouchableOpacity
             onPress={() => handleSelectSource("filters")}
-            style={{
-              marginBottom: 10,
-              borderRadius: 14,
-              borderWidth: StyleSheet.hairlineWidth,
-              paddingVertical: 20,
-              paddingHorizontal: 18,
-              backgroundColor: surface,
-              borderColor: theme.colors.outlineVariant,
-            }}
+            style={dyn.sourceButton(surface, theme)}
           >
             <View
               style={{
@@ -731,15 +966,7 @@ export default function ShuffleScreen() {
           {/* SURPRISE ME */}
           <TouchableOpacity
             onPress={() => handleSelectSource("surprise")}
-            style={{
-              marginBottom: 10,
-              borderRadius: 14,
-              borderWidth: StyleSheet.hairlineWidth,
-              paddingVertical: 20,
-              paddingHorizontal: 18,
-              backgroundColor: surface,
-              borderColor: theme.colors.outlineVariant,
-            }}
+            style={dyn.sourceButton(surface, theme)}
           >
             <View
               style={{
@@ -754,7 +981,6 @@ export default function ShuffleScreen() {
           </TouchableOpacity>
         </View>
       )}
-
       {/* FILTER MODE */}
       {phase === "filters" && (
         <View style={styles.container}>
@@ -795,12 +1021,16 @@ export default function ShuffleScreen() {
 
           <Button
             mode="contained"
-            buttonColor={accent}
-            textColor="#fff"
-            style={styles.shuffleButton}
-            onPress={handleShuffle}
-            loading={loading}
-            disabled={loading}
+            onPress={async () => {
+              await handleShuffle();
+
+              if (!isPremium && shufflesRemaining === 0) {
+                setShowShuffleUpgradeModal(true);
+                return;
+              }
+
+              incrementShuffleCount();
+            }}
           >
             {loading ? "Shuffling..." : "Shuffle Now"}
           </Button>
@@ -810,7 +1040,6 @@ export default function ShuffleScreen() {
           </Button>
         </View>
       )}
-
       {/* ELIMINATION MODE */}
       {phase === "eliminate" && (
         <View style={styles.container}>
@@ -834,7 +1063,8 @@ export default function ShuffleScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 24 }}
             renderItem={({ item }) => {
-              const isFavorite = favorites.some((f) => f.id === item.id);
+              const isFavorite = favoriteIds.has(item.id);
+              const imageUrl = getCardImage(item);
 
               return (
                 <Card
@@ -850,15 +1080,15 @@ export default function ShuffleScreen() {
                       <QuickActionsMenu
                         restaurant={item}
                         isFavorite={isFavorite}
-                        onToggleFavorite={handleToggleFavorite}
+                        onFavoriteChange={refreshFavoriteIds}
                         onCreateNewList={() => {}}
                       />
                     )}
                   />
 
-                  {item.photo && (
+                  {imageUrl && (
                     <Card.Cover
-                      source={{ uri: item.photo }}
+                      source={{ uri: imageUrl }}
                       style={{
                         height: CARD_PHOTO_HEIGHT,
                         resizeMode: "cover",
@@ -893,8 +1123,20 @@ export default function ShuffleScreen() {
           </Button>
         </View>
       )}
-
-      {/* DETAILS MODAL */}
+      <UpgradeModal
+        visible={showShuffleUpgradeModal}
+        onDismiss={() => setShowShuffleUpgradeModal(false)}
+        freeLimit={FREE_DAILY_SHUFFLES}
+        onMaybeLater={() => {
+          setShowShuffleUpgradeModal(false);
+          setRestaurants([]);
+          setNoResults(false);
+          setPhase("choose-source");
+          setShuffleSource(null);
+          setShuffleLabel("");
+          setListsExpanded(false);
+        }}
+      />
       <RestaurantDetailModal
         visible={showDetails}
         onDismiss={() => setShowDetails(false)}
@@ -906,7 +1148,14 @@ export default function ShuffleScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20 },
-
+  shuffleCounterContainer: {
+    marginVertical: 8,
+    paddingHorizontal: 4,
+  },
+  shuffleCounterText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -947,7 +1196,7 @@ export const dyn = {
     marginBottom: 10,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 16,
+    paddingVertical: 20,
     paddingHorizontal: 18,
     backgroundColor: surface,
     borderColor: theme.colors.outlineVariant,

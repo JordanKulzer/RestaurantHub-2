@@ -9,27 +9,35 @@ import { supabase } from "../utils/supabaseClient";
 import {
   HomeScreen,
   ShuffleScreen,
-  ProfileScreen,
   AccountScreen,
   SearchScreen,
   LoginScreen,
   SignupScreen,
   ListDetailScreen,
   RestaurantDetailScreen,
+  FavoritesDetailsScreen,
 } from "../screens";
+
 import { Session } from "@supabase/supabase-js";
-import { AuthStackParamList, RootStackParamList } from "./types";
+import { AuthStackParamList, RootStackParamList, TabParamList } from "./types";
 
-export type TabParamList = {
-  Home: undefined;
-  Shuffle: undefined;
-  Search: undefined;
-  Account: undefined;
-};
-
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<TabParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const RootStack = createNativeStackNavigator<RootStackParamList>();
+const MyStuffStack = createNativeStackNavigator();
+
+function MyStuffNavigator() {
+  return (
+    <MyStuffStack.Navigator screenOptions={{ headerShown: false }}>
+      <MyStuffStack.Screen name="AccountMain" component={AccountScreen} />
+      <MyStuffStack.Screen name="ListDetail" component={ListDetailScreen} />
+      <MyStuffStack.Screen
+        name="FavoritesDetail"
+        component={FavoritesDetailsScreen}
+      />
+    </MyStuffStack.Navigator>
+  );
+}
 
 function TabNavigator() {
   const theme = useTheme();
@@ -57,7 +65,7 @@ function TabNavigator() {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Shuffle" component={ShuffleScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
-      <Tab.Screen name="My Stuff" component={AccountScreen} />
+      <Tab.Screen name="My Stuff" component={MyStuffNavigator} />
     </Tab.Navigator>
   );
 }
@@ -75,21 +83,15 @@ export default function AppNavigator() {
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    // Load current session on startup
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
     });
 
-    // Listen for auth changes
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-      }
+      (_event, session) => setSession(session)
     );
 
-    return () => {
-      listener.subscription?.unsubscribe();
-    };
+    return () => listener.subscription?.unsubscribe();
   }, []);
 
   return (
@@ -97,7 +99,6 @@ export default function AppNavigator() {
       {session ? (
         <>
           <RootStack.Screen name="Tabs" component={TabNavigator} />
-          <RootStack.Screen name="ListDetail" component={ListDetailScreen} />
           <RootStack.Screen
             name="RestaurantDetail"
             component={RestaurantDetailScreen}
