@@ -15,7 +15,15 @@ export async function getFavorites(): Promise<RestaurantPointer[]> {
   const { data, error } = await supabase
     .from("favorites")
     .select(
-      "restaurant_id, restaurant_name, restaurant_address, restaurant_source"
+      `
+      id,
+      restaurant_id,
+      restaurant_name,
+      restaurant_address,
+      restaurant_source,
+      notes,
+      created_at
+    `
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
@@ -24,10 +32,12 @@ export async function getFavorites(): Promise<RestaurantPointer[]> {
   if (!data) return [];
 
   return data.map((row) => ({
-    id: row.restaurant_id,
+    uuid: row.id, // real PK
+    id: row.restaurant_id, // google place id
     name: row.restaurant_name ?? "",
     address: row.restaurant_address ?? null,
     source: (row.restaurant_source ?? "google") as "google",
+    notes: row.notes ?? null,
   }));
 }
 

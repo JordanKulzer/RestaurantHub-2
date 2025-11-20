@@ -145,3 +145,11 @@ export async function removeCollaborator(collabId: string) {
   if (error) throw error;
   return true;
 }
+
+export interface ListWithCount {
+  id: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+  placesCount: number;
+}

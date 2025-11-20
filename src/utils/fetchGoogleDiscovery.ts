@@ -1,7 +1,6 @@
 // src/utils/fetchGoogleDiscovery.ts
 
 import { HomeRestaurant } from "../types/homeRestaurant";
-import { getCachedPlace, setCachedPlace } from "../utils/googleCache";
 
 const GOOGLE_PLACES_BASE = "https://maps.googleapis.com/maps/api/place";
 const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_API_KEY as string;

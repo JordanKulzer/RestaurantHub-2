@@ -177,6 +177,9 @@ export default function QuickActionsMenu({
           style={{
             borderRadius: 50,
             elevation: 2,
+            margin: 0,
+            padding: 0,
+            marginTop: -10,
           }}
         />
       }

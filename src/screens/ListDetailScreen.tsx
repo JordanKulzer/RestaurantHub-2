@@ -5,7 +5,6 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Image,
   Linking,
   Platform,
 } from "react-native";
@@ -33,7 +32,7 @@ import { theme } from "../theme";
 import { getLocationCached } from "../utils/locationHelper";
 
 interface ListCardProps {
-  item: any; // we can refine this further if needed
+  item: any;
   theme: any;
   isFavorite: boolean;
   onFavoriteChange: () => void;
@@ -42,9 +41,9 @@ interface ListCardProps {
   openInGoogleMaps: (restaurant: any) => void;
   openInAppleMaps: (restaurant: any) => void;
   handleRemove: (itemId: string) => void;
+  openNoteEditor: (itemId: string, currentNote: string | null) => void;
 }
 
-// Distance helpers (same math as your other utilities)
 const EARTH_RADIUS_METERS = 6371000;
 
 function getDistanceMeters(
@@ -72,6 +71,7 @@ interface ListItemRow {
   restaurant_name: string;
   restaurant_address: string | null;
   restaurant_source: "google" | "yelp";
+  notes?: string | null;
 }
 
 export default function ListDetailScreen({ route, navigation }: any) {
@@ -115,9 +115,14 @@ export default function ListDetailScreen({ route, navigation }: any) {
     title,
     description: null,
   });
-  // -------------------------------------------------------------
-  // Load basic list items
-  // -------------------------------------------------------------
+  const hasEnrichedRef = React.useRef(false);
+
+  // Restaurant notes state
+  const [editingNoteForItem, setEditingNoteForItem] = useState<string | null>(
+    null
+  );
+  const [noteText, setNoteText] = useState("");
+
   const loadItems = async () => {
     const { data, error } = await supabase
       .from("list_items")
@@ -132,25 +137,20 @@ export default function ListDetailScreen({ route, navigation }: any) {
 
     setItems(data as ListItemRow[]);
 
-    // ✅ If empty list, stop loading immediately
     if (!data || data.length === 0) {
       setLoading(false);
     }
   };
-  // -------------------------------------------------------------
-  // Location for distance
-  // -------------------------------------------------------------
+
   const loadLocation = async () => {
     try {
-      const loc = await getLocationCached(); // handles permission + caching
+      const loc = await getLocationCached();
       setUserLocation({ lat: loc.latitude, lon: loc.longitude });
     } catch (e) {
       console.warn("⚠️ ListDetailScreen location error:", e);
     }
   };
-  // -------------------------------------------------------------
-  // Favorites
-  // -------------------------------------------------------------
+
   const loadFavorites = useCallback(async () => {
     try {
       const favs = await getFavorites();
@@ -173,10 +173,10 @@ export default function ListDetailScreen({ route, navigation }: any) {
     }
   };
 
-  // -------------------------------------------------------------
-  // Enrich items with Google details + distance
-  // -------------------------------------------------------------
   const enrichItems = useCallback(async () => {
+    if (hasEnrichedRef.current) return;
+    if (items.length === 0) return;
+
     try {
       const enriched = await Promise.all(
         items.map(async (item: ListItemRow) => {
@@ -233,6 +233,7 @@ export default function ListDetailScreen({ route, navigation }: any) {
       );
 
       setItems(enriched);
+      hasEnrichedRef.current = true;
     } finally {
       setLoading(false);
     }
@@ -247,12 +248,11 @@ export default function ListDetailScreen({ route, navigation }: any) {
 
   useEffect(() => {
     if (items.length === 0) return;
-    enrichItems();
-  }, [items, userLocation]);
+    if (hasEnrichedRef.current) return;
 
-  // -------------------------------------------------------------
-  // Remove from list
-  // -------------------------------------------------------------
+    enrichItems();
+  }, [enrichItems]);
+
   const handleRemove = async (itemId: string) => {
     try {
       const { error } = await supabase
@@ -268,18 +268,39 @@ export default function ListDetailScreen({ route, navigation }: any) {
     }
   };
 
-  // -------------------------------------------------------------
-  // Hours modal helpers
-  // -------------------------------------------------------------
+  const handleSaveNote = async (itemId: string, note: string) => {
+    try {
+      const { error } = await supabase
+        .from("list_items")
+        .update({ notes: note || null })
+        .eq("id", itemId);
+
+      if (error) throw error;
+
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId ? { ...item, notes: note || null } : item
+        )
+      );
+
+      setEditingNoteForItem(null);
+      setNoteText("");
+    } catch (e) {
+      console.error("❌ saveNote failed:", e);
+    }
+  };
+
+  const openNoteEditor = (itemId: string, currentNote: string | null) => {
+    setEditingNoteForItem(itemId);
+    setNoteText(currentNote || "");
+  };
+
   const openHoursModal = (hours: string[]) => {
     if (!hours || hours.length === 0) return;
     setHoursForModal(hours);
     setHoursVisible(true);
   };
 
-  // -------------------------------------------------------------
-  // Maps helpers
-  // -------------------------------------------------------------
   const openInGoogleMaps = (e: any) => {
     try {
       if (e.googleMapsUrl) {
@@ -332,9 +353,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
     }
   };
 
-  // -------------------------------------------------------------
-  // Detail modal
-  // -------------------------------------------------------------
   const openDetailsModal = (e: any) => {
     setSelectedRestaurant(e);
   };
@@ -349,69 +367,22 @@ export default function ListDetailScreen({ route, navigation }: any) {
     openInGoogleMaps,
     openInAppleMaps,
     handleRemove,
+    openNoteEditor,
   }: ListCardProps) => {
     const e = item.enriched;
-
-    const [photoIndex, setPhotoIndex] = useState(0);
-
-    const photo =
-      e?.photos?.[0] ??
-      "https://upload.wikimedia.org/wikipedia/commons/ac/No_image_available.svg";
-    const photos = e?.photos?.length ? e.photos : [photo];
 
     return (
       <Card
         mode="elevated"
-        style={[styles.card, { backgroundColor: theme.colors.surface }]}
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.colors.surface,
+            overflow: "hidden",
+          },
+        ]}
       >
-        <View style={{ position: "relative" }}>
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => {
-              const next = (photoIndex + 1) % photos.length;
-              setPhotoIndex(next);
-            }}
-            onLongPress={() => e && openDetailsModal(e)}
-          >
-            <View style={{ position: "relative" }}>
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => {
-                  const next = (photoIndex + 1) % photos.length;
-                  setPhotoIndex(next);
-                }}
-                onLongPress={() => e && openDetailsModal(e)}
-              >
-                <Image
-                  source={{ uri: photos[photoIndex] }}
-                  style={styles.thumb}
-                />
-
-                {/* NEW: photo counter indicator */}
-                {photos.length > 1 && (
-                  <>
-                    <View style={styles.photoIndicator}>
-                      <Text style={styles.photoIndicatorText}>
-                        {`${photoIndex + 1}/${photos.length}`}
-                      </Text>
-                    </View>
-
-                    {/* Existing badge */}
-                    <View
-                      style={[
-                        styles.hintBadge,
-                        { backgroundColor: theme.colors.secondary + "CC" },
-                      ]}
-                    >
-                      <Text style={styles.hintText}>Tap for more photos</Text>
-                    </View>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </View>
-
+        {/* Info Section */}
         <View style={styles.infoSection}>
           <View style={styles.rowTop}>
             <View style={{ flex: 1, paddingRight: 8 }}>
@@ -422,12 +393,13 @@ export default function ListDetailScreen({ route, navigation }: any) {
                 {e?.name ?? item.restaurant_name}
               </Text>
 
+              {/* Rating + reviews */}
               <View style={styles.metaRow}>
                 {e?.rating != null && (
                   <Text
                     style={[styles.metaText, { color: theme.colors.onSurface }]}
                   >
-                    {`⭐ ${e.rating.toFixed(1)}`}
+                    ⭐ {e.rating.toFixed(1)}
                   </Text>
                 )}
 
@@ -438,34 +410,22 @@ export default function ListDetailScreen({ route, navigation }: any) {
                       { color: theme.colors.onSurface + "99" },
                     ]}
                   >
-                    {`(${e.reviewCount} reviews)`}
-                  </Text>
-                )}
-
-                {e?.price && (
-                  <Text
-                    style={[
-                      styles.metaText,
-                      { color: theme.colors.onSurface + "99" },
-                    ]}
-                  >
-                    {`• ${e.price}`}
+                    ({e.reviewCount} reviews)
                   </Text>
                 )}
               </View>
 
+              {/* Hours */}
               <View style={styles.hoursRow}>
                 {e?.isOpen != null && (
                   <Text
-                    style={[
-                      styles.metaText,
-                      {
-                        color: e.isOpen
-                          ? theme.colors.primary
-                          : theme.colors.secondary,
-                        fontWeight: "600",
-                      },
-                    ]}
+                    style={{
+                      color: e.isOpen
+                        ? theme.colors.primary
+                        : theme.colors.secondary,
+                      fontWeight: "600",
+                      fontSize: 14,
+                    }}
                   >
                     {e.isOpen ? "Open now" : "Closed"}
                   </Text>
@@ -488,6 +448,7 @@ export default function ListDetailScreen({ route, navigation }: any) {
                 )}
               </View>
 
+              {/* Address */}
               {e?.address && (
                 <Text
                   style={[
@@ -499,6 +460,7 @@ export default function ListDetailScreen({ route, navigation }: any) {
                 </Text>
               )}
 
+              {/* Distance */}
               {e?.distanceMiles != null && (
                 <Text
                   style={[
@@ -506,11 +468,14 @@ export default function ListDetailScreen({ route, navigation }: any) {
                     { color: theme.colors.onSurface + "99" },
                   ]}
                 >
-                  {`${e.distanceMiles.toFixed(2)} mi away`}
+                  {e.distanceMiles.toFixed(2)} mi away
                 </Text>
               )}
+
+              {/* Restaurant Notes */}
             </View>
 
+            {/* Action Menu */}
             {e && (
               <QuickActionsMenu
                 restaurant={e}
@@ -520,7 +485,93 @@ export default function ListDetailScreen({ route, navigation }: any) {
               />
             )}
           </View>
+          {/* FULL-WIDTH BLOCKS (belong OUTSIDE rowTop) */}
+          {item.notes && (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => openNoteEditor(item.id, item.notes)}
+              style={{
+                marginTop: 14,
+                width: "100%",
+                padding: 14,
+                borderRadius: 14,
+                borderWidth: StyleSheet.hairlineWidth,
+                backgroundColor: theme.dark
+                  ? theme.colors.surface
+                  : theme.colors.background,
+                borderColor: theme.colors.outline,
+                position: "relative",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  lineHeight: 20,
+                  color:
+                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface,
+                }}
+              >
+                {item.notes}
+              </Text>
 
+              <View style={{ position: "absolute", top: 6, right: 6 }}>
+                <IconButton
+                  icon="pencil"
+                  size={18}
+                  onPress={() => openNoteEditor(item.id, item.notes)}
+                  iconColor={
+                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface
+                  }
+                  style={{ margin: 0 }}
+                />
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {!item.notes && (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => openNoteEditor(item.id, null)}
+              style={{
+                marginTop: 14,
+                width: "100%",
+                padding: 14,
+                borderRadius: 14,
+                borderWidth: StyleSheet.hairlineWidth,
+                backgroundColor: theme.dark
+                  ? theme.colors.surface
+                  : theme.colors.background,
+                borderColor: theme.colors.outline,
+                position: "relative",
+                justifyContent: "center",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  lineHeight: 20,
+                  color:
+                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface,
+                }}
+              >
+                Add Note
+              </Text>
+
+              <View style={{ position: "absolute", top: 6, right: 6 }}>
+                <IconButton
+                  icon="note-plus"
+                  size={18}
+                  onPress={() => openNoteEditor(item.id, null)}
+                  iconColor={
+                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface
+                  }
+                  style={{ margin: 0 }}
+                />
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Maps Buttons */}
           <View style={styles.linkRow}>
             <Button
               mode="outlined"
@@ -565,6 +616,7 @@ export default function ListDetailScreen({ route, navigation }: any) {
         openInGoogleMaps={openInGoogleMaps}
         openInAppleMaps={openInAppleMaps}
         handleRemove={handleRemove}
+        openNoteEditor={openNoteEditor}
       />
     );
   };
@@ -578,11 +630,9 @@ export default function ListDetailScreen({ route, navigation }: any) {
   }
 
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: theme.colors.background }}
-      edges={["top", "left", "right"]}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <LinearGradient
+        pointerEvents="none"
         colors={[theme.colors.background, theme.colors.surface]}
         style={StyleSheet.absoluteFill}
       />
@@ -604,31 +654,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
           iconColor={theme.colors.onSurface}
         />
       </View>
-
-      {/* List Description Section */}
-      {listInfo?.description && listInfo.description.trim().length > 0 && (
-        <View
-          style={{
-            marginHorizontal: 16,
-            marginBottom: 10,
-            padding: 14,
-            borderRadius: 14,
-            backgroundColor: theme.colors.surface,
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: theme.colors.outline,
-          }}
-        >
-          <Text
-            style={{
-              color: theme.colors.onSurface,
-              fontSize: 15,
-              lineHeight: 20,
-            }}
-          >
-            {listInfo.description}
-          </Text>
-        </View>
-      )}
 
       {!loading && items.length === 0 && (
         <View
@@ -664,7 +689,7 @@ export default function ListDetailScreen({ route, navigation }: any) {
               marginBottom: 18,
             }}
           >
-            Add restaurants from anywhere in the app using the “Add to List”
+            Add restaurants from anywhere in the app using the "Add to List"
             button.
           </Text>
 
@@ -724,13 +749,12 @@ export default function ListDetailScreen({ route, navigation }: any) {
         </Modal>
       </Portal>
 
-      {/* Full Detail Modal */}
       <RestaurantDetailModal
         visible={!!selectedRestaurant}
         onDismiss={() => setSelectedRestaurant(null)}
         restaurant={selectedRestaurant}
       />
-      {/* Edit / Delete Modal */}
+
       <Portal>
         <Modal
           visible={menuVisible}
@@ -782,7 +806,7 @@ export default function ListDetailScreen({ route, navigation }: any) {
           </Button>
         </Modal>
       </Portal>
-      {/* Edit List Modal */}
+
       <Portal>
         <Modal
           visible={editVisible}
@@ -838,7 +862,7 @@ export default function ListDetailScreen({ route, navigation }: any) {
             }}
             textColor={theme.colors.surface}
             style={{
-              backgroundColor: theme.colors.tertiary, // forest green
+              backgroundColor: theme.colors.tertiary,
               borderRadius: 12,
               paddingVertical: 6,
               marginBottom: 10,
@@ -858,7 +882,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
         </Modal>
       </Portal>
 
-      {/* Delete List Modal */}
       <Portal>
         <Modal
           visible={deleteVisible}
@@ -896,7 +919,7 @@ export default function ListDetailScreen({ route, navigation }: any) {
             }}
             textColor={theme.colors.surface}
             style={{
-              backgroundColor: theme.colors.secondary, // burnt orange
+              backgroundColor: theme.colors.secondary,
               borderRadius: 12,
               paddingVertical: 6,
               marginBottom: 10,
@@ -914,6 +937,68 @@ export default function ListDetailScreen({ route, navigation }: any) {
           </Button>
         </Modal>
       </Portal>
+
+      {/* Restaurant Note Editor Modal */}
+      <Portal>
+        <Modal
+          visible={!!editingNoteForItem}
+          onDismiss={() => {
+            setEditingNoteForItem(null);
+            setNoteText("");
+          }}
+          contentContainerStyle={modalStyle}
+        >
+          <Text
+            style={{
+              fontSize: 21,
+              fontWeight: "700",
+              marginBottom: 18,
+              color: theme.colors.onSurface,
+            }}
+          >
+            Restaurant Note
+          </Text>
+
+          <TextInput
+            label="Add your notes"
+            value={noteText}
+            onChangeText={setNoteText}
+            multiline
+            numberOfLines={4}
+            mode="outlined"
+            style={{ marginBottom: 24 }}
+          />
+
+          <Button
+            mode="contained"
+            onPress={() => {
+              if (editingNoteForItem) {
+                handleSaveNote(editingNoteForItem, noteText);
+              }
+            }}
+            textColor={theme.colors.surface}
+            style={{
+              backgroundColor: theme.colors.tertiary,
+              borderRadius: 12,
+              paddingVertical: 6,
+              marginBottom: 10,
+            }}
+          >
+            Save Note
+          </Button>
+
+          <Button
+            mode="text"
+            onPress={() => {
+              setEditingNoteForItem(null);
+              setNoteText("");
+            }}
+            textColor={theme.colors.onSurface}
+          >
+            Cancel
+          </Button>
+        </Modal>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -924,18 +1009,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 14,
-    paddingVertical: 12,
     gap: 4,
   },
   card: {
     borderRadius: 16,
     marginBottom: 20,
-    overflow: "hidden",
     elevation: 3,
-  },
-  thumb: {
-    height: 170,
-    width: "100%",
   },
   infoSection: {
     padding: 14,
@@ -985,33 +1064,6 @@ const styles = StyleSheet.create({
   linkButton: {
     borderRadius: 20,
     flexGrow: 1,
-  },
-  hintBadge: {
-    position: "absolute",
-    bottom: 10,
-    left: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  hintText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  photoIndicator: {
-    position: "absolute",
-    bottom: 8,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  photoIndicatorText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
   },
   headerTitle: {
     flex: 1,

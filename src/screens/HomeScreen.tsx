@@ -21,7 +21,6 @@ import {
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Swiper from "react-native-deck-swiper";
-import * as Location from "expo-location";
 import {
   RestaurantDetailModal,
   HomeSwipeCard,

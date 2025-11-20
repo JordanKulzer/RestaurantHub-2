@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   ScrollView,
-  Image,
   TouchableOpacity,
 } from "react-native";
 import {
@@ -13,7 +12,6 @@ import {
   Card,
   Button,
   useTheme,
-  FAB,
   Divider,
   Surface,
   Avatar,
@@ -25,24 +23,18 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import CreateListModal from "../components/CreateListModal";
 import { getLists, ListWithCount } from "../utils/listsApi";
+import { getFavorites } from "../utils/favoritesApis";
 
-const mockStarred = [
-  {
-    id: "1",
-    name: "Uchi Dallas",
-    image: "https://picsum.photos/600/400?random=1",
-  },
-  {
-    id: "2",
-    name: "Velvet Taco",
-    image: "https://picsum.photos/600/400?random=2",
-  },
-  {
-    id: "3",
-    name: "Katy Trail Ice House",
-    image: "https://picsum.photos/600/400?random=3",
-  },
-];
+// Special type for the Favorites "list"
+interface FavoritesItem {
+  id: "favorites";
+  title: "Favorites";
+  description: null;
+  placesCount: number;
+  isFavorites: true;
+}
+
+type CombinedListItem = ListWithCount | FavoritesItem;
 
 export default function AccountScreen() {
   const theme = useTheme();
@@ -50,7 +42,7 @@ export default function AccountScreen() {
   const isFocused = useIsFocused();
 
   const [lists, setLists] = useState<ListWithCount[]>([]);
-  const [starred] = useState(mockStarred);
+  const [favoritesCount, setFavoritesCount] = useState(0);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [loadingLists, setLoadingLists] = useState(false);
 
@@ -66,92 +58,131 @@ export default function AccountScreen() {
     }
   }, []);
 
+  const loadFavoritesCount = useCallback(async () => {
+    try {
+      const favs = await getFavorites();
+      setFavoritesCount(favs.length);
+    } catch (err) {
+      console.error("❌ AccountScreen: getFavorites failed:", err);
+    }
+  }, []);
+
   useEffect(() => {
     if (isFocused) {
       loadLists();
+      loadFavoritesCount();
     }
-  }, [isFocused, loadLists]);
+  }, [isFocused, loadLists, loadFavoritesCount]);
 
-  const renderStarred = ({ item }: any) => (
-    <TouchableOpacity style={styles.starredItem} activeOpacity={0.9}>
-      <Image source={{ uri: item.image }} style={styles.starredImage} />
-      <View style={styles.starredOverlay}>
-        <Text
-          style={[styles.starredLabel, { color: theme.colors.surface }]}
-          numberOfLines={1}
-        >
-          {item.name}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  // Combine favorites and lists
+  const combinedData: CombinedListItem[] = [
+    {
+      id: "favorites",
+      title: "Favorites",
+      description: null,
+      placesCount: favoritesCount,
+      isFavorites: true,
+    },
+    ...lists,
+  ];
 
-  const renderListCard = ({ item }: { item: ListWithCount }) => (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={() =>
-        navigation.navigate("ListDetail", {
-          listId: item.id,
-          title: item.title,
-        })
-      }
-    >
-      <Card
-        mode="elevated"
-        style={[
-          styles.fullListCard,
-          {
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.outline,
-          },
-        ]}
+  const renderListCard = ({ item }: { item: CombinedListItem }) => {
+    const isFavorites = "isFavorites" in item && item.isFavorites;
+
+    return (
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => {
+          if (isFavorites) {
+            navigation.navigate("FavoritesDetail", {
+              title: "Favorites",
+            });
+          } else {
+            navigation.navigate("ListDetail", {
+              listId: item.id,
+              title: item.title,
+            });
+          }
+        }}
       >
-        <View style={styles.fullListCardRow}>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                fontSize: 16,
-                fontWeight: "600",
-                color: theme.colors.onSurface,
-              }}
-              numberOfLines={1}
-            >
-              {item.title}
-            </Text>
-
-            {item.description ? (
+        <Card
+          mode="elevated"
+          style={[
+            styles.fullListCard,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: isFavorites
+                ? theme.colors.tertiary
+                : theme.colors.outline,
+            },
+          ]}
+        >
+          <View style={styles.fullListCardRow}>
+            {isFavorites && (
+              <Avatar.Icon
+                size={40}
+                icon="heart"
+                color={theme.colors.surface}
+                style={{
+                  backgroundColor: theme.colors.tertiary,
+                  marginRight: 12,
+                }}
+              />
+            )}
+            <View style={{ flex: 1 }}>
               <Text
                 style={{
-                  fontSize: 13,
-                  color: theme.colors.onSurfaceVariant,
-                  marginTop: 4,
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: isFavorites
+                    ? theme.colors.onTertiaryContainer
+                    : theme.colors.onSurface,
                 }}
-                numberOfLines={2}
+                numberOfLines={1}
               >
-                {item.description}
+                {item.title}
               </Text>
-            ) : null}
 
-            <Text
-              style={{
-                marginTop: 6,
-                fontSize: 12,
-                color: theme.colors.onSurfaceVariant,
-              }}
-            >
-              {item.placesCount} place{item.placesCount === 1 ? "" : "s"}
-            </Text>
+              {item.description ? (
+                <Text
+                  style={{
+                    fontSize: 13,
+                    color: theme.colors.onSurfaceVariant,
+                    marginTop: 4,
+                  }}
+                  numberOfLines={2}
+                >
+                  {item.description}
+                </Text>
+              ) : null}
+
+              <Text
+                style={{
+                  marginTop: 6,
+                  fontSize: 12,
+                  color: isFavorites
+                    ? theme.colors.onTertiaryContainer
+                    : theme.colors.onSurfaceVariant,
+                }}
+              >
+                {item.placesCount} place{item.placesCount === 1 ? "" : "s"}
+              </Text>
+            </View>
+
+            <IconButton
+              icon="chevron-right"
+              size={22}
+              iconColor={
+                isFavorites
+                  ? theme.colors.onTertiaryContainer
+                  : theme.colors.onSurfaceVariant
+              }
+            />
           </View>
-
-          <IconButton
-            icon="chevron-right"
-            size={22}
-            iconColor={theme.colors.onSurfaceVariant}
-          />
-        </View>
-      </Card>
-    </TouchableOpacity>
-  );
+        </Card>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView
@@ -167,7 +198,7 @@ export default function AccountScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 110 }}
       >
-        {/* Top Header / Profile Card */}
+        {/* Top Header */}
         <View style={styles.headerContainer}>
           <View style={styles.headerRow}>
             <Text
@@ -182,142 +213,14 @@ export default function AccountScreen() {
               onPress={() => console.log("Open settings / account")}
             />
           </View>
-
-          {/* <Surface
-            style={[
-              styles.profileCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.outline,
-              },
-            ]}
-            mode="elevated"
-          >
-            <View style={styles.profileRow}>
-              <Avatar.Icon
-                size={56}
-                icon="account"
-                color={theme.colors.surface}
-                style={{ backgroundColor: theme.colors.tertiary }}
-              />
-              <View style={{ marginLeft: 12, flex: 1 }}>
-                <Text
-                  style={{
-                    fontWeight: "600",
-                    fontSize: 16,
-                    color: theme.colors.onSurface,
-                  }}
-                >
-                  Jordan Kulzer
-                </Text>
-                <Text
-                  style={{
-                    color: theme.colors.onSurfaceVariant,
-                    fontSize: 13,
-                    marginTop: 2,
-                  }}
-                >
-                  Save places you love and build lists to share later.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.profileStatsRow}>
-              <View style={styles.statPill}>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: theme.colors.onSurfaceVariant,
-                  }}
-                >
-                  {lists.length} list{lists.length === 1 ? "" : "s"}
-                </Text>
-              </View>
-              <Button
-                mode="outlined"
-                compact
-                textColor={theme.colors.primary}
-                style={{
-                  borderColor: theme.colors.primary,
-                  borderRadius: 99,
-                  paddingHorizontal: 8,
-                  paddingVertical: 0,
-                }}
-                onPress={() => setShowCreateModal(true)}
-              >
-                New list
-              </Button>
-            </View>
-          </Surface> */}
         </View>
 
-        {/* Starred Section */}
+        {/* Combined Lists Section */}
         <View style={styles.sectionHeaderRow}>
           <Text
             style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
           >
-            Favorites
-          </Text>
-          <Button
-            mode="text"
-            compact
-            textColor={theme.colors.primary}
-            onPress={() =>
-              navigation.navigate("FavoritesDetail", {
-                title: "Favorites",
-              })
-            }
-          >
-            View all
-          </Button>
-        </View>
-
-        {starred.length === 0 ? (
-          <Surface
-            style={[
-              styles.emptySurface,
-              { backgroundColor: theme.colors.surface },
-            ]}
-          >
-            <Text
-              style={[
-                styles.emptyText,
-                { color: theme.colors.onSurfaceVariant },
-              ]}
-            >
-              You haven’t starred any restaurants yet.
-            </Text>
-            <Text
-              style={{
-                color: theme.colors.onSurfaceVariant,
-                fontSize: 13,
-              }}
-            >
-              Swipe on places you love to star them.
-            </Text>
-          </Surface>
-        ) : (
-          <FlatList
-            data={starred}
-            horizontal
-            keyExtractor={(item) => item.id}
-            renderItem={renderStarred}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{
-              paddingHorizontal: 16,
-              paddingBottom: 4,
-            }}
-          />
-        )}
-
-        <Divider style={{ marginVertical: 22, opacity: 0.15 }} />
-
-        {/* Lists Section */}
-        <View style={styles.sectionHeaderRow}>
-          <Text
-            style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
-          >
-            Your Lists
+            Lists
           </Text>
           {lists.length > 0 && (
             <Button
@@ -348,45 +251,64 @@ export default function AccountScreen() {
             </Text>
           </Surface>
         ) : lists.length === 0 ? (
-          <Surface
-            style={[
-              styles.emptySurface,
-              { backgroundColor: theme.colors.surface },
-            ]}
-          >
-            <Text
+          <>
+            {/* Show Favorites card even when no lists */}
+            <FlatList
+              data={[
+                {
+                  id: "favorites",
+                  title: "Favorites",
+                  description: null,
+                  placesCount: favoritesCount,
+                  isFavorites: true,
+                },
+              ]}
+              renderItem={renderListCard}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              contentContainerStyle={{ paddingHorizontal: 16 }}
+            />
+
+            <Surface
               style={[
-                styles.emptyText,
-                { color: theme.colors.onSurfaceVariant },
+                styles.emptySurface,
+                { backgroundColor: theme.colors.surface, marginTop: 14 },
               ]}
             >
-              No lists created yet.
-            </Text>
-            <Text
-              style={{
-                color: theme.colors.onSurfaceVariant,
-                fontSize: 13,
-                marginBottom: 14,
-              }}
-            >
-              Start a list for date nights, brunch spots, or travel ideas.
-            </Text>
-            <Button
-              mode="contained"
-              onPress={() => setShowCreateModal(true)}
-              textColor={theme.colors.surface}
-              style={{
-                backgroundColor: theme.colors.tertiary,
-                borderRadius: 999,
-                paddingHorizontal: 14,
-              }}
-            >
-              Create your first list
-            </Button>
-          </Surface>
+              <Text
+                style={[
+                  styles.emptyText,
+                  { color: theme.colors.onSurfaceVariant },
+                ]}
+              >
+                No lists created yet.
+              </Text>
+              <Text
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  fontSize: 13,
+                  marginBottom: 14,
+                }}
+              >
+                Start a list for date nights, brunch spots, or travel ideas.
+              </Text>
+              <Button
+                mode="contained"
+                onPress={() => setShowCreateModal(true)}
+                textColor={theme.colors.surface}
+                style={{
+                  backgroundColor: theme.colors.tertiary,
+                  borderRadius: 999,
+                  paddingHorizontal: 14,
+                }}
+              >
+                Create your first list
+              </Button>
+            </Surface>
+          </>
         ) : (
           <FlatList
-            data={lists}
+            data={combinedData}
             renderItem={renderListCard}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
@@ -483,27 +405,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
   },
-  profileCard: {
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-  },
-  profileRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  profileStatsRow: {
-    marginTop: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  statPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -514,42 +415,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-  },
-  starredItem: {
-    marginRight: 12,
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  starredImage: {
-    width: 130,
-    height: 110,
-  },
-  starredOverlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
-  starredLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  listCardWrapper: {
-    width: "47%",
-    marginBottom: 16,
-  },
-  card: {
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  listCardContent: {
-    paddingVertical: 14,
-  },
-  listMetaRow: {
-    marginTop: 6,
   },
   emptySurface: {
     marginHorizontal: 16,

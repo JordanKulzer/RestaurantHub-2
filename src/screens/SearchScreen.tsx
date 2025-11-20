@@ -126,10 +126,7 @@ export default function SearchScreen({ navigation }: any) {
     !loading && results.length === 0 && query.trim().length === 0;
 
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: theme.colors.background }}
-      edges={["top", "left", "right"]}
-    >
+    <SafeAreaView style={{ flex: 1 }} edges={["left", "right"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
@@ -150,7 +147,7 @@ export default function SearchScreen({ navigation }: any) {
         <Appbar.Header
           mode="small"
           elevated
-          statusBarHeight={0}
+          statusBarHeight={undefined} // let it auto-detect iOS notch height
           style={[
             styles.appbar,
             {
@@ -159,10 +156,10 @@ export default function SearchScreen({ navigation }: any) {
             },
           ]}
         >
-          <Appbar.BackAction
+          {/* <Appbar.BackAction
             onPress={() => navigation.goBack()}
             color={theme.colors.primary}
-          />
+          /> */}
           <View style={styles.searchbarContainer}>
             <Searchbar
               placeholder="Search restaurants"
@@ -171,9 +168,19 @@ export default function SearchScreen({ navigation }: any) {
               onSubmitEditing={() => handleSearch()}
               style={[
                 styles.searchbar,
-                { backgroundColor: theme.colors.background },
+                {
+                  height: 34,
+                  paddingVertical: 0,
+                  backgroundColor: theme.colors.background,
+                },
               ]}
-              inputStyle={{ fontSize: 15, color: theme.colors.onSurface }}
+              inputStyle={{
+                fontSize: 15,
+                color: theme.colors.onSurface,
+                height: 30,
+                paddingVertical: 0,
+                marginVertical: -2,
+              }}
               iconColor={theme.colors.primary}
               placeholderTextColor={theme.colors.onSurface + "88"}
             />
@@ -324,11 +331,13 @@ const styles = StyleSheet.create({
   searchbarContainer: {
     flex: 1,
     justifyContent: "center",
+    paddingLeft: 8,
   },
   searchbar: {
     flex: 1,
     marginRight: 4,
-    borderRadius: 8,
+    minHeight: 20,
+    borderRadius: 20,
     marginVertical: Platform.OS === "ios" ? 4 : 0,
   },
   scrollArea: {

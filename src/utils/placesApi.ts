@@ -1,4 +1,9 @@
-import { getCachedPlace, setCachedPlace } from "./googleCache";
+import {
+  getCachedPlace,
+  getShortCache,
+  setCachedPlace,
+  setShortCache,
+} from "./cache";
 import { getLocationCached } from "./locationHelper";
 
 const GOOGLE_PLACES_BASE =
@@ -72,18 +77,34 @@ export async function fetchNearbyRestaurants({
 
     const keywords = extractKeywords(categories);
 
+    // Build base params once
     let params = `location=${latitude},${longitude}&radius=${radiusMeters}`;
-
     if (keywords.length > 0) {
       params += `&keyword=${encodeURIComponent(keywords.join(" "))}`;
     }
 
+    let url: string;
+    let cacheKey: string;
+
+    // ---------------------------------------------------
+    // PAGE TOKEN LOGIC (Google requires this special URL)
+    // ---------------------------------------------------
     if (pageToken) {
-      params = `pagetoken=${pageToken}`;
+      url = `${GOOGLE_PLACES_BASE}?pagetoken=${pageToken}&key=${API_KEY}`;
+      cacheKey = `nearby:page:${pageToken}`;
+    } else {
+      url = `${GOOGLE_PLACES_BASE}?${params}&key=${API_KEY}`;
+
+      cacheKey = `nearby:${latitude}:${longitude}:${radiusMeters}:${minRating}:${keywords.join(
+        ","
+      )}`;
     }
 
-    const url = `${GOOGLE_PLACES_BASE}?${params}&key=${API_KEY}`;
-    console.log("🍽️ Fetching nearby restaurants:", url);
+    const cached = getShortCache<{
+      results: RestaurantResult[];
+      nextToken: string | null;
+    }>(cacheKey);
+    if (cached) return cached;
 
     const res = await fetch(url);
     const data = await res.json();
@@ -112,7 +133,14 @@ export async function fetchNearbyRestaurants({
         };
       }) ?? [];
 
-    return { results: formatted, nextToken: data.next_page_token || null };
+    const result = {
+      results: formatted,
+      nextToken: data.next_page_token || null,
+    };
+
+    setShortCache(cacheKey, result);
+
+    return result;
   } catch (error) {
     console.error("Error fetching nearby restaurants:", error);
     return { results: [], nextToken: null };
@@ -150,6 +178,12 @@ export async function fetchShuffledRestaurants({
       6
     )}&radius=${radiusMeters}&type=restaurant${keywordParam}&key=${API_KEY}`;
 
+    const cacheKey = `shuffle:${latitude}:${longitude}:${distanceMiles}:${keywords.join(
+      ","
+    )}:${minRating}:${limit}`;
+    const cached = getShortCache<RestaurantResult[]>(cacheKey);
+    if (cached) return cached;
+
     console.log("🍽️ Fetching shuffled restaurants:", url);
 
     const res = await fetch(url);
@@ -163,7 +197,7 @@ export async function fetchShuffledRestaurants({
     );
     const shuffled = filtered.sort(() => Math.random() - 0.5).slice(0, limit);
 
-    return shuffled.map((r: any) => {
+    const result = shuffled.map((r: any) => {
       const lat = r.geometry?.location?.lat;
       const lon = r.geometry?.location?.lng;
 
@@ -183,9 +217,12 @@ export async function fetchShuffledRestaurants({
           r.photos?.length > 0
             ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
             : null,
-        distance: distance ?? null,
+        distance,
       };
     });
+    setShortCache(cacheKey, result);
+
+    return result;
   } catch (err) {
     console.error("❌ Error fetching shuffled restaurants:", err);
     return [];
@@ -254,9 +291,28 @@ export async function fetchRestaurantDetails(placeId: string) {
 // -------------------------------------------------------------
 // Text Search
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// Text Search (with normalized cache keys)
+// -------------------------------------------------------------
 export async function fetchTextSearch(query: string) {
   try {
     const { latitude, longitude } = await getLocationCached();
+
+    // -----------------------------------------
+    // Normalize user text → keyword tokens
+    // Example: "mexican, texmex" → ["mexican", "texmex"]
+    // -----------------------------------------
+    const normalizedTokens = query
+      .toLowerCase()
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .sort();
+
+    const cacheKey = `text:${normalizedTokens.join(",")}`;
+
+    const cached = getShortCache<RestaurantResult[]>(cacheKey);
+    if (cached) return cached;
 
     const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
       query
@@ -265,7 +321,7 @@ export async function fetchTextSearch(query: string) {
     const res = await fetch(url);
     const data = await res.json();
 
-    return (
+    const result =
       data.results?.map((r: any) => ({
         id: r.place_id,
         name: r.name,
@@ -275,8 +331,11 @@ export async function fetchTextSearch(query: string) {
           r.photos?.length > 0
             ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
             : null,
-      })) ?? []
-    );
+      })) ?? [];
+
+    setShortCache(cacheKey, result);
+
+    return result;
   } catch (e) {
     console.error("fetchTextSearch:", e);
     return [];

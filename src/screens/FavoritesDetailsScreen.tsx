@@ -18,16 +18,16 @@ import {
   Button,
   Portal,
   Modal,
+  TextInput,
 } from "react-native-paper";
-import * as Location from "expo-location";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-
 import { getFavorites } from "../utils/favoritesApis";
 import { fetchRestaurantDetails } from "../utils/placesApi";
 import QuickActionsMenu from "../components/QuickActionsMenu";
 import RestaurantDetailModal from "../components/RestaurantDetailModal";
 import { getLocationCached } from "../utils/locationHelper";
+import { supabase } from "../utils/supabaseClient";
 
 const EARTH_RADIUS_METERS = 6371000;
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -57,11 +57,11 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(
     null
   );
-  const [photoIndex, setPhotoIndex] = useState(0);
-
   const [selectedRestaurant, setSelectedRestaurant] = useState<any | null>(
     null
   );
+  const [editingNoteForId, setEditingNoteForId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
   const [hoursVisible, setHoursVisible] = useState(false);
   const [hoursForModal, setHoursForModal] = useState<string[]>([]);
 
@@ -207,6 +207,33 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
     }
   };
 
+  const handleSaveNote = async (favId: string, note: string) => {
+    try {
+      const { error } = await supabase
+        .from("favorites")
+        .update({ notes: note || null })
+        .eq("id", favId);
+
+      if (error) throw error;
+
+      setItems((prev) =>
+        prev.map((item) =>
+          item.uuid === favId ? { ...item, notes: note || null } : item
+        )
+      );
+
+      setEditingNoteForId(null);
+      setNoteText("");
+    } catch (err) {
+      console.error("❌ saveFavoriteNote failed:", err);
+    }
+  };
+
+  const openNoteEditor = (id: string, currentNote: string | null) => {
+    setEditingNoteForId(id);
+    setNoteText(currentNote || "");
+  };
+
   // ----------------------------------------
   // Render card
   // ----------------------------------------
@@ -225,7 +252,7 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
         style={[styles.card, { backgroundColor: theme.colors.surface }]}
       >
         {/* Photo Section */}
-        <TouchableOpacity
+        {/* <TouchableOpacity
           activeOpacity={0.9}
           onPress={() => {
             if (photos.length > 1) {
@@ -255,7 +282,7 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
               </View>
             </>
           )}
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         {/* Info Section */}
         <View style={styles.infoSection}>
@@ -372,6 +399,92 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
             )}
           </View>
 
+          {/* Notes (full width) */}
+          {item.notes && (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => openNoteEditor(item.uuid, item.notes)}
+              style={{
+                width: "100%",
+                marginTop: 14,
+                padding: 14,
+                borderRadius: 14,
+                borderWidth: StyleSheet.hairlineWidth,
+                backgroundColor: theme.dark
+                  ? theme.colors.surface
+                  : theme.colors.background,
+                borderColor: theme.colors.outline,
+                position: "relative",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  lineHeight: 20,
+                  color:
+                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface,
+                }}
+              >
+                {item.notes}
+              </Text>
+
+              <View style={{ position: "absolute", top: 6, right: 6 }}>
+                <IconButton
+                  icon="pencil"
+                  size={18}
+                  onPress={() => openNoteEditor(item.uuid, item.notes)}
+                  iconColor={
+                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface
+                  }
+                  style={{ margin: 0 }}
+                />
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Add Note (full width) */}
+          {!item.notes && (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => openNoteEditor(item.uuid, null)}
+              style={{
+                width: "100%",
+                marginTop: 14,
+                padding: 14,
+                borderRadius: 14,
+                borderWidth: StyleSheet.hairlineWidth,
+                backgroundColor: theme.dark
+                  ? theme.colors.surface
+                  : theme.colors.background,
+                borderColor: theme.colors.outline,
+                position: "relative",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  lineHeight: 20,
+                  color:
+                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface,
+                }}
+              >
+                Add Note
+              </Text>
+
+              <View style={{ position: "absolute", top: 6, right: 6 }}>
+                <IconButton
+                  icon="note-plus"
+                  size={18}
+                  onPress={() => openNoteEditor(item.uuid, null)}
+                  iconColor={
+                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface
+                  }
+                  style={{ margin: 0 }}
+                />
+              </View>
+            </TouchableOpacity>
+          )}
+
           {/* Maps Buttons */}
           <View style={styles.linkRow}>
             <Button
@@ -414,12 +527,14 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      edges={["top", "left", "right"]}
+    >
       <LinearGradient
         colors={[theme.colors.background, theme.colors.surface]}
         style={StyleSheet.absoluteFill}
       />
-
       {/* Header */}
       <View style={styles.headerRow}>
         <IconButton
@@ -431,7 +546,6 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
         <Text style={styles.headerTitle}>{title}</Text>
         <View style={{ width: 40 }} />
       </View>
-
       {/* Empty State */}
       {items.length === 0 ? (
         <View style={styles.emptyBox}>
@@ -454,40 +568,110 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
           data={items}
           renderItem={renderItem}
           keyExtractor={(i) => i.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
         />
       )}
-
       {/* Full Detail Modal */}
       <RestaurantDetailModal
         visible={!!selectedRestaurant}
         restaurant={selectedRestaurant}
         onDismiss={() => setSelectedRestaurant(null)}
       />
-
       {/* Hours Modal */}
       <Portal>
         <Modal
           visible={hoursVisible}
           onDismiss={() => setHoursVisible(false)}
-          contentContainerStyle={{
-            padding: 20,
-            backgroundColor: theme.colors.surface,
-            borderRadius: 16,
-            marginHorizontal: 20,
-          }}
+          contentContainerStyle={[
+            styles.hoursModalContainer,
+            { backgroundColor: theme.colors.surface },
+          ]}
         >
+          <Text style={[styles.hoursTitle, { color: theme.colors.onSurface }]}>
+            Hours
+          </Text>
           {hoursForModal.map((line, idx) => (
-            <Text key={idx} style={{ color: theme.colors.onSurface }}>
+            <Text
+              key={idx}
+              style={{
+                color: theme.colors.onSurfaceVariant,
+                marginBottom: 4,
+              }}
+            >
               {line}
             </Text>
           ))}
-
           <Button
+            mode="contained"
             onPress={() => setHoursVisible(false)}
             style={{ marginTop: 12 }}
           >
             Close
+          </Button>
+        </Modal>
+      </Portal>
+      <Portal>
+        <Modal
+          visible={!!editingNoteForId}
+          onDismiss={() => {
+            setEditingNoteForId(null);
+            setNoteText("");
+          }}
+          contentContainerStyle={{
+            backgroundColor: theme.colors.surface,
+            padding: 24,
+            marginHorizontal: 16,
+            borderRadius: 22,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 21,
+              fontWeight: "700",
+              marginBottom: 18,
+              color: theme.colors.onSurface,
+            }}
+          >
+            Favorite Note
+          </Text>
+
+          <TextInput
+            label="Add your notes"
+            value={noteText}
+            onChangeText={setNoteText}
+            multiline
+            mode="outlined"
+            numberOfLines={4}
+            style={{ marginBottom: 24 }}
+          />
+
+          <Button
+            mode="contained"
+            textColor={theme.colors.surface}
+            style={{
+              backgroundColor: theme.colors.tertiary,
+              borderRadius: 12,
+              paddingVertical: 6,
+              marginBottom: 10,
+            }}
+            onPress={() => {
+              if (editingNoteForId) {
+                handleSaveNote(editingNoteForId, noteText);
+              }
+            }}
+          >
+            Save Note
+          </Button>
+
+          <Button
+            mode="text"
+            textColor={theme.colors.onSurface}
+            onPress={() => {
+              setEditingNoteForId(null);
+              setNoteText("");
+            }}
+          >
+            Cancel
           </Button>
         </Modal>
       </Portal>
@@ -562,21 +746,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
-  // Photo Overlays
-  photoIndicator: {
-    position: "absolute",
-    bottom: 8,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+  hoursModalContainer: {
+    marginHorizontal: 24,
+    borderRadius: 16,
+    padding: 16,
   },
-
-  photoIndicatorText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
+  hoursTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 8,
   },
 
   hintBadge: {
@@ -599,7 +777,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 14,
-    paddingVertical: 10,
     justifyContent: "space-between",
   },
 
@@ -610,7 +787,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Empty State
   emptyBox: {
     marginHorizontal: 16,
     marginTop: 20,
