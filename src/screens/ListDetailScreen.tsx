@@ -728,17 +728,24 @@ export default function ListDetailScreen({ route, navigation }: any) {
           <Text style={[styles.hoursTitle, { color: theme.colors.onSurface }]}>
             Hours
           </Text>
-          {hoursForModal.map((line, idx) => (
-            <Text
-              key={idx}
-              style={{
-                color: theme.colors.onSurfaceVariant,
-                marginBottom: 4,
-              }}
-            >
-              {line}
+          {hoursForModal.length > 0 ? (
+            hoursForModal.map((line, idx) => (
+              <Text
+                key={idx}
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  marginBottom: 4,
+                }}
+              >
+                {line}
+              </Text>
+            ))
+          ) : (
+            <Text style={{ color: theme.colors.onSurface + "99" }}>
+              Hours unavailable
             </Text>
-          ))}
+          )}
+
           <Button
             mode="contained"
             onPress={() => setHoursVisible(false)}

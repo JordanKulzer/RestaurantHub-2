@@ -111,9 +111,7 @@ export default function AccountScreen() {
             styles.fullListCard,
             {
               backgroundColor: theme.colors.surface,
-              borderColor: isFavorites
-                ? theme.colors.tertiary
-                : theme.colors.outline,
+              borderColor: theme.colors.tertiary,
             },
           ]}
         >
@@ -229,7 +227,7 @@ export default function AccountScreen() {
               textColor={theme.colors.primary}
               onPress={() => setShowCreateModal(true)}
             >
-              New list
+              Create a new list
             </Button>
           )}
         </View>
@@ -315,8 +313,6 @@ export default function AccountScreen() {
             contentContainerStyle={{ paddingHorizontal: 16 }}
           />
         )}
-
-        <Divider style={{ marginVertical: 22, opacity: 0.15 }} />
 
         {/* Account / Logout Section */}
         <Text

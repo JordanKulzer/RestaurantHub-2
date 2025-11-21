@@ -8,6 +8,8 @@ import {
   ScrollView,
   Animated,
   Keyboard,
+  Linking,
+  TouchableOpacity,
 } from "react-native";
 import {
   Appbar,
@@ -20,8 +22,7 @@ import {
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { fetchTextSearch, fetchRestaurantDetails } from "../utils/placesApi"; // ⬅️ REMOVED autocomplete imports
-
+import { fetchTextSearch, fetchRestaurantDetails } from "../utils/placesApi";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import RestaurantDetailModal from "../components/RestaurantDetailModal";
 import HomeSkeleton from "../components/HomeSkeleton";
@@ -198,36 +199,101 @@ export default function SearchScreen({ navigation }: any) {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipContainer}
+          contentContainerStyle={{
+            paddingHorizontal: 12,
+            paddingTop: 8,
+            paddingBottom: 40,
+          }}
+          style={{ maxHeight: 125 }}
         >
-          {CATEGORY_OPTIONS.map((opt) => {
-            const isSelected = selectedCategory === opt.value;
-            return (
+          <View style={{ flexDirection: "column", gap: 2 }}>
+            <View style={{ flexDirection: "row" }}>
               <Chip
+                mode="outlined"
                 compact
-                key={opt.value}
-                onPress={() => handleCategorySelect(opt.value)}
-                selected={isSelected}
                 style={[
                   styles.chip,
                   {
-                    backgroundColor: isSelected
-                      ? theme.colors.secondary
-                      : theme.colors.surface,
-                    borderColor: theme.colors.outline,
+                    borderColor: theme.colors.error,
+                    backgroundColor: theme.colors.errorContainer,
+                    marginRight: 8,
                   },
                 ]}
                 textStyle={{
-                  color: isSelected
-                    ? theme.colors.onPrimary || "#fff"
-                    : theme.colors.onSurface,
+                  color: theme.colors.error,
+                  fontWeight: "600",
                 }}
-                selectedColor={theme.colors.onPrimary}
+                onPress={() => {
+                  setSelectedCategory(null);
+                  setQuery("");
+                  setResults([]);
+                }}
               >
-                {opt.label}
+                Clear Filters
               </Chip>
-            );
-          })}
+              {CATEGORY_OPTIONS.slice(
+                0,
+                Math.ceil(CATEGORY_OPTIONS.length / 2)
+              ).map((opt) => {
+                const isSelected = selectedCategory === opt.value;
+                return (
+                  <Chip
+                    key={opt.value}
+                    mode="outlined"
+                    style={[
+                      styles.chip,
+                      {
+                        borderColor: theme.colors.tertiary,
+                        backgroundColor: isSelected
+                          ? theme.colors.tertiary
+                          : "transparent",
+                        marginRight: 8,
+                      },
+                    ]}
+                    textStyle={{
+                      color: isSelected ? "#fff" : theme.colors.tertiary,
+                      fontWeight: "600",
+                    }}
+                    onPress={() => handleCategorySelect(opt.value)}
+                  >
+                    {opt.label}
+                  </Chip>
+                );
+              })}
+            </View>
+
+            {/* Second Row of Categories */}
+            <View style={{ flexDirection: "row" }}>
+              {CATEGORY_OPTIONS.slice(
+                Math.ceil(CATEGORY_OPTIONS.length / 2)
+              ).map((opt) => {
+                const isSelected = selectedCategory === opt.value;
+                return (
+                  <Chip
+                    key={opt.value}
+                    mode="outlined"
+                    style={[
+                      styles.chip,
+                      {
+                        borderColor: theme.colors.tertiary,
+                        backgroundColor: isSelected
+                          ? theme.colors.tertiary
+                          : "transparent",
+                        marginRight: 8,
+                      },
+                    ]}
+                    textStyle={{
+                      color: isSelected ? "#fff" : theme.colors.tertiary,
+                      fontWeight: "600",
+                    }}
+                    onPress={() => handleCategorySelect(opt.value)}
+                  >
+                    {opt.label}
+                  </Chip>
+                );
+              })}
+            </View>
+          </View>
         </ScrollView>
 
         {/* ----------------------------------- */}
@@ -277,32 +343,188 @@ export default function SearchScreen({ navigation }: any) {
                       { backgroundColor: theme.colors.surface },
                     ]}
                   >
-                    {item.photo && (
-                      <Card.Cover
-                        source={{ uri: item.photo }}
-                        style={{
-                          height: 160,
-                          borderTopLeftRadius: 12,
-                          borderTopRightRadius: 12,
-                        }}
+                    {/* Image with gradient overlay */}
+                    <View style={{ position: "relative" }}>
+                      {item.photo ? (
+                        <Card.Cover
+                          source={{ uri: item.photo }}
+                          style={styles.cardImage}
+                        />
+                      ) : (
+                        <Card.Cover
+                          source={{
+                            uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png",
+                          }}
+                          style={styles.cardImage}
+                        />
+                      )}
+                      <LinearGradient
+                        colors={["transparent", "rgba(0,0,0,0.6)"]}
+                        style={StyleSheet.absoluteFillObject}
                       />
-                    )}
-                    <Card.Title
-                      title={item.name}
-                      titleStyle={{ color: theme.colors.onSurface }}
-                      subtitleStyle={{ color: theme.colors.onSurface + "99" }}
-                      subtitle={`${item.address || ""} • ⭐${
-                        item.rating || "N/A"
-                      }`}
-                    />
-                    <Card.Actions>
-                      <Button
-                        onPress={() => openDetails(item.id)}
-                        textColor={theme.colors.primary}
+                    </View>
+
+                    {/* Info Section - matching HomeSwipeCard */}
+                    <View style={styles.cardInfo}>
+                      <Text
+                        style={[
+                          styles.cardName,
+                          { color: theme.colors.onSurface },
+                        ]}
                       >
-                        View Details
-                      </Button>
-                    </Card.Actions>
+                        {item.name}
+                      </Text>
+
+                      {/* Meta Row - Rating, Reviews, Price */}
+                      <View style={styles.cardMetaRow}>
+                        {item.rating != null && (
+                          <Text
+                            style={[
+                              styles.cardMetaText,
+                              { color: theme.colors.onSurface },
+                            ]}
+                          >
+                            {`⭐ ${
+                              typeof item.rating === "number"
+                                ? item.rating.toFixed(1)
+                                : item.rating
+                            }`}
+                          </Text>
+                        )}
+
+                        {item.reviewCount != null && (
+                          <Text
+                            style={[
+                              styles.cardMetaText,
+                              { color: theme.colors.onSurface + "99" },
+                            ]}
+                          >
+                            {`(${item.reviewCount} reviews)`}
+                          </Text>
+                        )}
+
+                        {item.price != null && (
+                          <Text
+                            style={[
+                              styles.cardMetaText,
+                              { color: theme.colors.onSurface + "99" },
+                            ]}
+                          >
+                            {`• ${item.price}`}
+                          </Text>
+                        )}
+                      </View>
+
+                      {/* Hours Row */}
+                      {(item.isOpen !== null || item.hours) && (
+                        <View style={styles.hoursRow}>
+                          {item.isOpen !== null &&
+                            item.isOpen !== undefined && (
+                              <Text
+                                style={[
+                                  styles.cardMetaText,
+                                  {
+                                    color: item.isOpen
+                                      ? theme.colors.primary
+                                      : theme.colors.secondary,
+                                    fontWeight: "600",
+                                  },
+                                ]}
+                              >
+                                {item.isOpen ? "Open now" : "Closed"}
+                              </Text>
+                            )}
+
+                          {item.hours && item.hours.length > 0 && (
+                            <TouchableOpacity
+                              onPress={() => {
+                                // You'll need to add state for this
+                                console.log("Show hours modal for:", item.id);
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  marginLeft: 8,
+                                  color: theme.colors.primary,
+                                  fontWeight: "600",
+                                  textDecorationLine: "underline",
+                                  fontSize: 14,
+                                }}
+                              >
+                                View Hours
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Address */}
+                      {item.address && (
+                        <Text
+                          style={[
+                            styles.cardDetail,
+                            { color: theme.colors.onSurface + "99" },
+                          ]}
+                        >
+                          {item.address}
+                        </Text>
+                      )}
+
+                      {/* Distance */}
+                      {item.distanceMiles != null && (
+                        <Text
+                          style={[
+                            styles.cardDetail,
+                            { color: theme.colors.onSurface + "99" },
+                          ]}
+                        >
+                          {`${item.distanceMiles.toFixed(2)} mi away`}
+                        </Text>
+                      )}
+
+                      {/* Google and Apple Maps Buttons */}
+                      <View style={styles.linkRow}>
+                        {/* Google Maps */}
+                        <Button
+                          mode="outlined"
+                          icon="google-maps"
+                          textColor={theme.colors.primary}
+                          style={[
+                            styles.linkButton,
+                            { borderColor: theme.colors.primary },
+                          ]}
+                          onPress={() => {
+                            const googleMapsUrl =
+                              item.googleMapsUrl ||
+                              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                item.address || item.name
+                              )}`;
+                            Linking.openURL(googleMapsUrl);
+                          }}
+                        >
+                          Google
+                        </Button>
+
+                        {/* Apple Maps */}
+                        <Button
+                          mode="outlined"
+                          icon={Platform.OS === "ios" ? "map" : "map-marker"}
+                          textColor={theme.colors.tertiary}
+                          style={[
+                            styles.linkButton,
+                            { borderColor: theme.colors.tertiary },
+                          ]}
+                          onPress={() => {
+                            const url = `http://maps.apple.com/?daddr=${encodeURIComponent(
+                              item.address || item.name
+                            )}`;
+                            Linking.openURL(url);
+                          }}
+                        >
+                          Apple
+                        </Button>
+                      </View>
+                    </View>
                   </Card>
                 )}
               />
@@ -348,8 +570,54 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: 16,
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: "hidden",
+  },
+  cardImage: {
+    width: "100%",
+    height: 240,
+    borderRadius: 10,
+  },
+  cardInfo: {
+    padding: 16,
+  },
+  cardName: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  cardMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginBottom: 4,
+  },
+  hoursRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 8,
+  },
+  cardMetaText: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  cardDetail: {
+    fontSize: 13,
+    marginBottom: 3,
+  },
+  detailsButton: {
+    marginTop: 12,
+    borderRadius: 25,
+  },
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+    gap: 8,
+  },
+  linkButton: {
+    flex: 1,
+    borderRadius: 25,
   },
   emptyState: {
     flex: 1,
@@ -367,17 +635,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 250,
   },
-  chipContainer: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 15,
+  twoRowWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 8,
+    width: 10000, // <-- forces true wrap + horizontal scroll
+    flexShrink: 0, // <-- prevent shrinking
   },
+
   chip: {
-    marginRight: 8,
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
     height: 34,
-    borderRadius: 16,
     justifyContent: "center",
+    paddingHorizontal: 10,
+    marginBottom: 8,
   },
   chipText: {
     fontSize: 14,

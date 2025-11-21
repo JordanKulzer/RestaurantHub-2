@@ -17,9 +17,15 @@ export interface RestaurantResult {
   id: string;
   name: string;
   rating: number;
+  reviewCount?: number | null;
+  price?: string | null;
   address: string;
   photo?: string | null;
   distance?: number | null;
+  distanceMiles?: number | null;
+  isOpen?: boolean | null;
+  hours?: string[];
+  googleMapsUrl?: string;
 }
 
 // --- Shared Distance Helpers ---
@@ -298,10 +304,7 @@ export async function fetchTextSearch(query: string) {
   try {
     const { latitude, longitude } = await getLocationCached();
 
-    // -----------------------------------------
     // Normalize user text → keyword tokens
-    // Example: "mexican, texmex" → ["mexican", "texmex"]
-    // -----------------------------------------
     const normalizedTokens = query
       .toLowerCase()
       .split(/[\s,]+/)
@@ -322,16 +325,34 @@ export async function fetchTextSearch(query: string) {
     const data = await res.json();
 
     const result =
-      data.results?.map((r: any) => ({
-        id: r.place_id,
-        name: r.name,
-        rating: r.rating,
-        address: r.formatted_address || r.vicinity,
-        photo:
-          r.photos?.length > 0
-            ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
-            : null,
-      })) ?? [];
+      data.results?.map((r: any) => {
+        // Calculate distance
+        const lat = r.geometry?.location?.lat;
+        const lon = r.geometry?.location?.lng;
+        let distanceMiles: number | null = null;
+
+        if (lat && lon) {
+          const meters = getDistanceMeters(latitude, longitude, lat, lon);
+          distanceMiles = metersToMiles(meters);
+        }
+
+        return {
+          id: r.place_id,
+          name: r.name,
+          rating: r.rating,
+          reviewCount: r.user_ratings_total ?? null, // Add review count
+          price: r.price_level ? "$".repeat(r.price_level) : null, // Add price
+          address: r.formatted_address || r.vicinity,
+          distanceMiles, // Add distance
+          isOpen: r.opening_hours?.open_now ?? null, // Add open status
+          hours: r.opening_hours?.weekday_text ?? [], // Add hours if available
+          googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${r.place_id}`, // Add Google Maps URL
+          photo:
+            r.photos?.length > 0
+              ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${r.photos[0].photo_reference}&key=${API_KEY}`
+              : null,
+        };
+      }) ?? [];
 
     setShortCache(cacheKey, result);
 
@@ -341,7 +362,6 @@ export async function fetchTextSearch(query: string) {
     return [];
   }
 }
-
 // -------------------------------------------------------------
 // Autocomplete
 // -------------------------------------------------------------

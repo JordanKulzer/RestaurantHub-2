@@ -706,10 +706,10 @@ export default function ShuffleScreen() {
               fontSize: 22,
               fontWeight: "700",
               marginBottom: 6,
-              color: theme.colors.onBackground,
+              color: theme.colors.tertiary,
             }}
           >
-            Restaurant Shuffler
+            Shuffler
           </Text>
           {showShuffleCounter && (
             <View style={styles.shuffleCounterContainer}>
@@ -763,50 +763,71 @@ export default function ShuffleScreen() {
           </Text>
 
           {/* FAVORITES */}
-          <TouchableOpacity
-            onPress={() => handleSelectSource("favorites")}
-            style={dyn.sourceButton(surface, theme)}
+          <Surface
+            mode="elevated"
+            style={[
+              styles.sourceCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.tertiary,
+              },
+            ]}
           >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
+            <TouchableOpacity
+              onPress={() => handleSelectSource("favorites")}
+              style={{ paddingVertical: 18, paddingHorizontal: 16 }}
             >
-              <Text style={dyn.sourceText(theme)}>Favorites</Text>
-              <Text style={dyn.expandArrow(theme)}>▶</Text>
-            </View>
-          </TouchableOpacity>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <Text style={dyn.sourceText(theme)}>Favorites</Text>
+                <Text style={dyn.expandArrow(theme)}>▶</Text>
+              </View>
+            </TouchableOpacity>
+          </Surface>
 
-          {/* LIKED */}
-          <TouchableOpacity
-            onPress={() => handleSelectSource("liked")}
-            style={dyn.sourceButton(surface, theme)}
+          <Surface
+            mode="elevated"
+            style={[
+              styles.sourceCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.tertiary,
+              },
+            ]}
           >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
+            <TouchableOpacity
+              onPress={() => handleSelectSource("liked")}
+              style={{ paddingVertical: 18, paddingHorizontal: 16 }}
             >
-              <Text style={dyn.sourceText(theme)}>Liked</Text>
-              <Text style={dyn.expandArrow(theme)}>▶</Text>
-            </View>
-          </TouchableOpacity>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <Text style={dyn.sourceText(theme)}>Liked</Text>
+                <Text style={dyn.expandArrow(theme)}>▶</Text>
+              </View>
+            </TouchableOpacity>
+          </Surface>
 
-          {/* LISTS — EXPANDABLE CARD */}
-          <View
-            style={{
-              backgroundColor: surface,
-              borderRadius: 14,
-              borderWidth: StyleSheet.hairlineWidth,
-              borderColor: theme.colors.outlineVariant,
-              paddingVertical: 20,
-              paddingHorizontal: 16,
-              marginBottom: 10,
-            }}
+          <Surface
+            mode="elevated"
+            style={[
+              styles.sourceCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.tertiary,
+                paddingVertical: 20,
+                paddingHorizontal: 16,
+              },
+            ]}
           >
             <TouchableOpacity
               onPress={toggleListsExpand}
@@ -816,15 +837,7 @@ export default function ShuffleScreen() {
                 alignItems: "center",
               }}
             >
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: "600",
-                  color: theme.colors.onSurface,
-                }}
-              >
-                Lists
-              </Text>
+              <Text style={dyn.sourceText(theme)}>Lists</Text>
               <Text
                 style={{
                   fontSize: 18,
@@ -944,41 +957,61 @@ export default function ShuffleScreen() {
                 )}
               </View>
             )}
-          </View>
+          </Surface>
 
-          {/* FILTERS */}
-          <TouchableOpacity
-            onPress={() => handleSelectSource("filters")}
-            style={dyn.sourceButton(surface, theme)}
+          <Surface
+            mode="elevated"
+            style={[
+              styles.sourceCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.tertiary,
+              },
+            ]}
           >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
+            <TouchableOpacity
+              onPress={() => handleSelectSource("filters")}
+              style={{ paddingVertical: 18, paddingHorizontal: 16 }}
             >
-              <Text style={dyn.sourceText(theme)}>Filters</Text>
-              <Text style={dyn.expandArrow(theme)}>▶</Text>
-            </View>
-          </TouchableOpacity>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <Text style={dyn.sourceText(theme)}>Filters</Text>
+                <Text style={dyn.expandArrow(theme)}>▶</Text>
+              </View>
+            </TouchableOpacity>
+          </Surface>
 
-          {/* SURPRISE ME */}
-          <TouchableOpacity
-            onPress={() => handleSelectSource("surprise")}
-            style={dyn.sourceButton(surface, theme)}
+          <Surface
+            mode="elevated"
+            style={[
+              styles.sourceCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.tertiary,
+              },
+            ]}
           >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
+            <TouchableOpacity
+              onPress={() => handleSelectSource("surprise")}
+              style={{ paddingVertical: 18, paddingHorizontal: 16 }}
             >
-              <Text style={dyn.sourceText(theme)}>Surprise Me</Text>
-              <Text style={dyn.expandArrow(theme)}>▶</Text>
-            </View>
-          </TouchableOpacity>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <Text style={dyn.sourceText(theme)}>Surprise Me</Text>
+                <Text style={dyn.expandArrow(theme)}>▶</Text>
+              </View>
+            </TouchableOpacity>
+          </Surface>
         </View>
       )}
       {/* FILTER MODE */}
@@ -1183,7 +1216,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     elevation: 3,
   },
-
+  sourceCard: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    elevation: 2,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
   shuffleButton: {
     marginTop: 16,
     borderRadius: 24,
@@ -1205,11 +1244,11 @@ export const dyn = {
   sourceText: (theme: MD3Theme) => ({
     fontSize: 16,
     fontWeight: "500" as const,
-    color: theme.colors.onSurface,
+    color: theme.colors.tertiary,
   }),
 
   expandArrow: (theme: MD3Theme) => ({
     fontSize: 18,
-    color: theme.colors.onSurfaceVariant,
+    color: theme.colors.tertiary,
   }),
 };

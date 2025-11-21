@@ -351,7 +351,10 @@ export default function HomeSwipeCard({
             hours.map((line, i) => (
               <Text
                 key={i}
-                style={[styles.hoursText, { color: theme.colors.onSurface }]}
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  marginBottom: 4,
+                }}
               >
                 {line}
               </Text>
@@ -362,7 +365,13 @@ export default function HomeSwipeCard({
             </Text>
           )}
 
-          <Button onPress={() => setHoursVisible(false)}>Close</Button>
+          <Button
+            mode="contained"
+            onPress={() => setHoursVisible(false)}
+            style={{ marginTop: 12 }}
+          >
+            Close
+          </Button>
         </Modal>
       </Portal>
     </Card>
@@ -431,15 +440,14 @@ const styles = StyleSheet.create({
   },
   hintText: { color: "#fff", fontSize: 13, fontWeight: "500" },
   hoursModal: {
-    marginHorizontal: 20,
+    marginHorizontal: 24,
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
   },
   hoursTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 12,
-    textAlign: "center",
+    marginBottom: 8,
   },
   hoursText: {
     fontSize: 14,

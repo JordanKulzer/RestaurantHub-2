@@ -491,7 +491,7 @@ export default function HomeScreen() {
               style={{
                 fontSize: 22,
                 fontWeight: "700",
-                color: theme.colors.primary,
+                color: theme.colors.tertiary,
                 letterSpacing: 0.5,
               }}
             >
@@ -570,7 +570,7 @@ export default function HomeScreen() {
                 label === "Clear Filters"
                   ? theme.colors.errorContainer || "#fce4e4"
                   : isActive
-                  ? theme.colors.primary
+                  ? theme.colors.tertiary
                   : "transparent";
 
               const textColor =
@@ -578,7 +578,7 @@ export default function HomeScreen() {
                   ? theme.colors.error || "#b00020"
                   : isActive
                   ? "#fff"
-                  : theme.colors.primary;
+                  : theme.colors.tertiary;
 
               const handlePress = async () => {
                 if (label === "Clear Filters") {
@@ -599,7 +599,7 @@ export default function HomeScreen() {
                   style={[
                     styles.chip,
                     {
-                      borderColor: theme.colors.primary,
+                      borderColor: theme.colors.tertiary,
                       backgroundColor,
                       marginRight: 8,
                     },
@@ -678,11 +678,11 @@ export default function HomeScreen() {
                 onPress={() => {
                   setActiveModal("distance");
                 }}
-                textColor={theme.colors.primary}
+                textColor={theme.colors.tertiary}
                 style={{
                   borderRadius: 25,
                   paddingHorizontal: 16,
-                  borderColor: theme.colors.primary,
+                  borderColor: theme.colors.tertiary,
                 }}
               >
                 Expand Search Area
