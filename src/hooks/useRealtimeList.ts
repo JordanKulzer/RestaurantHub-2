@@ -1,5 +1,5 @@
 // src/hooks/useRealtimeList.ts
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "../utils/supabaseClient";
 import { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -11,12 +11,9 @@ interface UseRealtimeListOptions {
   onCollaboratorAdded?: (collaborator: any) => void;
   onCollaboratorRemoved?: (userId: string) => void;
   onListUpdated?: (list: any) => void;
+  onNoteChanged?: () => void;
 }
 
-/**
- * Hook to subscribe to real-time changes for a list
- * Listens to list_items and list_collaborators changes
- */
 export function useRealtimeList({
   listId,
   onItemAdded,
@@ -25,16 +22,49 @@ export function useRealtimeList({
   onCollaboratorAdded,
   onCollaboratorRemoved,
   onListUpdated,
+  onNoteChanged,
 }: UseRealtimeListOptions) {
   const [isConnected, setIsConnected] = useState(false);
 
+  // ✅ Use refs to store latest callbacks without triggering re-subscription
+  const callbacksRef = useRef({
+    onItemAdded,
+    onItemUpdated,
+    onItemDeleted,
+    onCollaboratorAdded,
+    onCollaboratorRemoved,
+    onListUpdated,
+    onNoteChanged,
+  });
+
+  // ✅ Update refs when callbacks change (doesn't trigger useEffect)
+  useEffect(() => {
+    callbacksRef.current = {
+      onItemAdded,
+      onItemUpdated,
+      onItemDeleted,
+      onCollaboratorAdded,
+      onCollaboratorRemoved,
+      onListUpdated,
+      onNoteChanged,
+    };
+  }, [
+    onItemAdded,
+    onItemUpdated,
+    onItemDeleted,
+    onCollaboratorAdded,
+    onCollaboratorRemoved,
+    onListUpdated,
+    onNoteChanged,
+  ]);
+
+  // ✅ Only re-subscribe when listId changes
   useEffect(() => {
     if (!listId) return;
 
     let channel: RealtimeChannel;
 
     const setupSubscription = async () => {
-      // Create a channel for this list
       channel = supabase.channel(`list:${listId}`);
 
       // Subscribe to list_items changes
@@ -49,7 +79,7 @@ export function useRealtimeList({
           },
           (payload) => {
             console.log("🔵 Item added:", payload.new);
-            onItemAdded?.(payload.new);
+            callbacksRef.current.onItemAdded?.(payload.new);
           }
         )
         .on(
@@ -62,7 +92,7 @@ export function useRealtimeList({
           },
           (payload) => {
             console.log("🟡 Item updated:", payload.new);
-            onItemUpdated?.(payload.new);
+            callbacksRef.current.onItemUpdated?.(payload.new);
           }
         )
         .on(
@@ -75,12 +105,9 @@ export function useRealtimeList({
           },
           (payload) => {
             console.log("🔴 Item deleted:", payload.old.id);
-            onItemDeleted?.(payload.old.id);
+            callbacksRef.current.onItemDeleted?.(payload.old.id);
           }
-        );
-
-      // Subscribe to list_collaborators changes
-      channel
+        )
         .on(
           "postgres_changes",
           {
@@ -91,7 +118,7 @@ export function useRealtimeList({
           },
           (payload) => {
             console.log("👥 Collaborator added:", payload.new);
-            onCollaboratorAdded?.(payload.new);
+            callbacksRef.current.onCollaboratorAdded?.(payload.new);
           }
         )
         .on(
@@ -104,35 +131,42 @@ export function useRealtimeList({
           },
           (payload) => {
             console.log("👥 Collaborator removed:", payload.old.user_id);
-            onCollaboratorRemoved?.(payload.old.user_id);
+            callbacksRef.current.onCollaboratorRemoved?.(payload.old.user_id);
           }
-        );
-
-      // Subscribe to list metadata changes
-      channel.on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "lists",
-          filter: `id=eq.${listId}`,
-        },
-        (payload) => {
-          console.log("📝 List updated:", payload.new);
-          onListUpdated?.(payload.new);
-        }
-      );
-
-      // Subscribe to the channel
-      channel.subscribe((status) => {
-        console.log(`📡 Realtime status for list ${listId}:`, status);
-        setIsConnected(status === "SUBSCRIBED");
-      });
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "lists",
+            filter: `id=eq.${listId}`,
+          },
+          (payload) => {
+            console.log("📝 List updated:", payload.new);
+            callbacksRef.current.onListUpdated?.(payload.new);
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "list_item_notes",
+          },
+          (payload) => {
+            console.log("📝 Note changed:", payload);
+            callbacksRef.current.onNoteChanged?.();
+          }
+        )
+        .subscribe((status) => {
+          console.log(`📡 Realtime status for list ${listId}:`, status);
+          setIsConnected(status === "SUBSCRIBED");
+        });
     };
 
     setupSubscription();
 
-    // Cleanup on unmount
     return () => {
       if (channel) {
         console.log(`🔌 Unsubscribing from list ${listId}`);
@@ -140,26 +174,16 @@ export function useRealtimeList({
         setIsConnected(false);
       }
     };
-  }, [
-    listId,
-    onItemAdded,
-    onItemUpdated,
-    onItemDeleted,
-    onCollaboratorAdded,
-    onCollaboratorRemoved,
-    onListUpdated,
-  ]);
+  }, [listId]);
 
   return { isConnected };
 }
 
-/**
- * Hook for presence - shows who's currently viewing a list
- */
 export function useListPresence(listId: string) {
   const [activeUsers, setActiveUsers] = useState<any[]>([]);
   const [myPresenceId, setMyPresenceId] = useState<string | null>(null);
 
+  // ✅ Only re-subscribe when listId changes
   useEffect(() => {
     if (!listId) return;
 
@@ -179,7 +203,6 @@ export function useListPresence(listId: string) {
         },
       });
 
-      // Track presence state
       channel
         .on("presence", { event: "sync" }, () => {
           const state = channel.presenceState();
@@ -193,7 +216,6 @@ export function useListPresence(listId: string) {
           console.log("👋 User left:", leftPresences);
         });
 
-      // Subscribe and track our presence
       await channel.subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
           const presenceTrackStatus = await channel.track({

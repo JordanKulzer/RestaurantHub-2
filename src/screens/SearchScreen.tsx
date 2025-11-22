@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
+// src/screens/SearchScreen.tsx
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -21,12 +22,17 @@ import {
   Chip,
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
+import { useIsFocused } from "@react-navigation/native";
 
 import { fetchTextSearch, fetchRestaurantDetails } from "../utils/placesApi";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import RestaurantDetailModal from "../components/RestaurantDetailModal";
 import HomeSkeleton from "../components/HomeSkeleton";
 import { SafeAreaView } from "react-native-safe-area-context";
+import QuickActionsMenu from "../components/QuickActionsMenu";
+import { CreateListModal } from "../components";
+import { getLists } from "../utils/listsApi";
+import { getFavorites } from "../utils/favoritesApis";
 
 export default function SearchScreen({ navigation }: any) {
   const theme = useTheme();
@@ -37,7 +43,74 @@ export default function SearchScreen({ navigation }: any) {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  const [listsCache, setListsCache] = useState<any[]>([]);
+  const [listsLoaded, setListsLoaded] = useState(false);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [createListVisible, setCreateListVisible] = useState(false);
+  const [pendingListCallback, setPendingListCallback] = useState<
+    null | ((l: any) => void)
+  >(null);
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const isFocused = useIsFocused();
+
+  const formatAddress = (address: string | null | undefined): string => {
+    if (!address) return "";
+
+    const parts = address.split(",").map((p) => p.trim());
+
+    if (parts.length >= 3) {
+      const stateZipPart = parts[2];
+      const stateMatch = stateZipPart.match(/^([A-Z]{2})/);
+
+      if (stateMatch) {
+        const state = stateMatch[1];
+        return `${parts[0]}, ${parts[1]}, ${state}`;
+      }
+    }
+
+    return address;
+  };
+  useEffect(() => {
+    if (isFocused) {
+      preloadLists();
+      refreshFavorites();
+    }
+  }, [isFocused]);
+
+  const preloadLists = async () => {
+    try {
+      const data = await getLists();
+      setListsCache(data);
+      setListsLoaded(true);
+    } catch (e) {
+      console.error("❌ Failed to preload lists:", e);
+    }
+  };
+
+  const refreshFavorites = useCallback(async () => {
+    try {
+      const favs = await getFavorites();
+      setFavoriteIds(new Set(favs.map((f) => f.id)));
+    } catch (e) {
+      console.error("❌ Failed to load favorites:", e);
+    }
+  }, []);
+
+  const handleOpenCreateList = (onCreatedCallback?: (newList: any) => void) => {
+    setPendingListCallback(() => onCreatedCallback || null);
+    setCreateListVisible(true);
+  };
+
+  const handleListCreated = async (newList: any) => {
+    setCreateListVisible(false);
+    await preloadLists();
+
+    if (pendingListCallback) {
+      pendingListCallback(newList);
+      setPendingListCallback(null);
+    }
+  };
 
   useEffect(() => {
     if (!loading && results.length > 0) {
@@ -51,22 +124,15 @@ export default function SearchScreen({ navigation }: any) {
     }
   }, [loading, results]);
 
-  // -----------------------------------------
-  // Input Change — NO AUTOCOMPLETE
-  // -----------------------------------------
   const handleInputChange = (text: string) => {
     setQuery(text);
 
-    // Clear results when input is empty
     if (text.trim().length === 0) {
       setResults([]);
       setSelectedCategory(null);
     }
   };
 
-  // -----------------------------------------
-  // Manual Search
-  // -----------------------------------------
   const handleSearch = async (q?: string) => {
     const text = q || query;
     if (!text.trim()) return;
@@ -83,12 +149,8 @@ export default function SearchScreen({ navigation }: any) {
     }
   };
 
-  // -----------------------------------------
-  // Category Search
-  // -----------------------------------------
   const handleCategorySelect = async (category: string) => {
     if (selectedCategory === category) {
-      // deselect category
       setSelectedCategory(null);
       setResults([]);
       setQuery("");
@@ -109,9 +171,6 @@ export default function SearchScreen({ navigation }: any) {
     }
   };
 
-  // -----------------------------------------
-  // Open Details
-  // -----------------------------------------
   const openDetails = async (placeId: string) => {
     Keyboard.dismiss();
     try {
@@ -142,13 +201,10 @@ export default function SearchScreen({ navigation }: any) {
           style={StyleSheet.absoluteFill}
         />
 
-        {/* ----------------------------------- */}
-        {/* HEADER */}
-        {/* ----------------------------------- */}
         <Appbar.Header
           mode="small"
           elevated
-          statusBarHeight={undefined} // let it auto-detect iOS notch height
+          statusBarHeight={undefined}
           style={[
             styles.appbar,
             {
@@ -157,10 +213,6 @@ export default function SearchScreen({ navigation }: any) {
             },
           ]}
         >
-          {/* <Appbar.BackAction
-            onPress={() => navigation.goBack()}
-            color={theme.colors.primary}
-          /> */}
           <View style={styles.searchbarContainer}>
             <Searchbar
               placeholder="Search restaurants"
@@ -193,9 +245,6 @@ export default function SearchScreen({ navigation }: any) {
           />
         </Appbar.Header>
 
-        {/* ----------------------------------- */}
-        {/* CATEGORY CHIPS */}
-        {/* ----------------------------------- */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -262,7 +311,6 @@ export default function SearchScreen({ navigation }: any) {
               })}
             </View>
 
-            {/* Second Row of Categories */}
             <View style={{ flexDirection: "row" }}>
               {CATEGORY_OPTIONS.slice(
                 Math.ceil(CATEGORY_OPTIONS.length / 2)
@@ -296,9 +344,6 @@ export default function SearchScreen({ navigation }: any) {
           </View>
         </ScrollView>
 
-        {/* ----------------------------------- */}
-        {/* MAIN RESULTS */}
-        {/* ----------------------------------- */}
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 20 }}
@@ -362,9 +407,38 @@ export default function SearchScreen({ navigation }: any) {
                         colors={["transparent", "rgba(0,0,0,0.6)"]}
                         style={StyleSheet.absoluteFillObject}
                       />
+
+                      {/* ✅ QuickActionsMenu in top right with colored background */}
+                      <View
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          right: 0,
+                          width: 50,
+                          height: 50,
+                          backgroundColor: theme.colors.secondary + "DD",
+                          borderBottomLeftRadius: 20,
+                          justifyContent: "center",
+                          alignItems: "center",
+                          elevation: 4,
+                          shadowColor: "#000",
+                          shadowOpacity: 0.3,
+                          shadowRadius: 4,
+                          shadowOffset: { width: 0, height: 2 },
+                        }}
+                      >
+                        <QuickActionsMenu
+                          restaurant={item}
+                          isFavorite={favoriteIds.has(item.id)}
+                          onFavoriteChange={refreshFavorites}
+                          onCreateNewList={handleOpenCreateList}
+                          preloadedLists={listsCache}
+                          listsReady={listsLoaded}
+                        />
+                      </View>
                     </View>
 
-                    {/* Info Section - matching HomeSwipeCard */}
+                    {/* Info Section */}
                     <View style={styles.cardInfo}>
                       <Text
                         style={[
@@ -438,7 +512,6 @@ export default function SearchScreen({ navigation }: any) {
                           {item.hours && item.hours.length > 0 && (
                             <TouchableOpacity
                               onPress={() => {
-                                // You'll need to add state for this
                                 console.log("Show hours modal for:", item.id);
                               }}
                             >
@@ -466,7 +539,7 @@ export default function SearchScreen({ navigation }: any) {
                             { color: theme.colors.onSurface + "99" },
                           ]}
                         >
-                          {item.address}
+                          {formatAddress(item.address)}
                         </Text>
                       )}
 
@@ -484,7 +557,6 @@ export default function SearchScreen({ navigation }: any) {
 
                       {/* Google and Apple Maps Buttons */}
                       <View style={styles.linkRow}>
-                        {/* Google Maps */}
                         <Button
                           mode="outlined"
                           icon="google-maps"
@@ -505,7 +577,6 @@ export default function SearchScreen({ navigation }: any) {
                           Google
                         </Button>
 
-                        {/* Apple Maps */}
                         <Button
                           mode="outlined"
                           icon={Platform.OS === "ios" ? "map" : "map-marker"}
@@ -536,6 +607,13 @@ export default function SearchScreen({ navigation }: any) {
           visible={modalVisible}
           onDismiss={() => setModalVisible(false)}
           restaurant={selectedRestaurant}
+        />
+
+        {/* ✅ CreateListModal */}
+        <CreateListModal
+          visible={createListVisible}
+          onDismiss={() => setCreateListVisible(false)}
+          onCreated={handleListCreated}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -635,14 +713,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 250,
   },
-  twoRowWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    rowGap: 8,
-    width: 10000, // <-- forces true wrap + horizontal scroll
-    flexShrink: 0, // <-- prevent shrinking
-  },
-
   chip: {
     borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
@@ -650,10 +720,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 10,
     marginBottom: 8,
-  },
-  chipText: {
-    fontSize: 14,
-    fontWeight: "500",
-    textTransform: "capitalize",
   },
 });

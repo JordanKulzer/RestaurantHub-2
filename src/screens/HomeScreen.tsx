@@ -50,7 +50,6 @@ const FREE_DAILY_SWIPES = 2;
 
 export default function HomeScreen() {
   const theme = useTheme();
-  const navigation = useNavigation();
   const [restaurants, setRestaurants] = useState<HomeRestaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDetails, setShowDetails] = useState(false);
@@ -530,20 +529,6 @@ export default function HomeScreen() {
             >
               FoodFinder
             </Text>
-            <View style={{ minWidth: 40, alignItems: "flex-end" }}>
-              {currentRestaurant ? (
-                <QuickActionsMenu
-                  restaurant={currentRestaurant}
-                  isFavorite={favoritesIds.has(currentRestaurant.id)}
-                  onFavoriteChange={refreshFavorites}
-                  onCreateNewList={handleOpenCreateList}
-                  preloadedLists={listsCache}
-                  listsReady={listsLoaded}
-                />
-              ) : (
-                <View style={{ width: 40, height: 55 }} />
-              )}
-            </View>
           </View>
 
           {showSwipeCounter && (
@@ -749,6 +734,11 @@ export default function HomeScreen() {
                     <HomeSwipeCard
                       key={r.id}
                       restaurant={r}
+                      isFavorite={favoritesIds.has(r.id)}
+                      onFavoriteChange={refreshFavorites}
+                      onCreateNewList={handleOpenCreateList}
+                      preloadedLists={listsCache}
+                      listsReady={listsLoaded}
                       onLike={() => {
                         if (!isPremium && swipesRemaining === 0) {
                           setShowUpgradeModal(true);

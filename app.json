@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "foodFinder",
-    "slug": "foodFinder",
-    "scheme": "foodFinder",
+    "name": "FoodFinder",
+    "slug": "FoodFinder",
+    "scheme": "FoodFinder",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,20 +16,28 @@
     "ios": {
       "supportsTablet": true,
       "associatedDomains": [
-        "applinks:foodFinder.app"
-      ]
+        "applinks:FoodFinder.app"
+      ],
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "FoodFinder needs your location to show nearby restaurants and calculate distances.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "FoodFinder needs your location to show nearby restaurants."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
           "data": [
             {
-              "scheme": "foodfinder"
+              "scheme": "FoodFinder"
             }
           ],
           "category": [

@@ -8,13 +8,13 @@ import { supabase } from "../utils/supabaseClient";
 import {
   HomeScreen,
   ShuffleScreen,
-  AccountScreen,
+  SavedScreen,
   SearchScreen,
   LoginScreen,
   SignupScreen,
   ListDetailScreen,
   RestaurantDetailScreen,
-  FavoritesDetailsScreen,
+  FavoritesDetailScreen,
   JoinListScreen,
 } from "../screens";
 import { Session } from "@supabase/supabase-js";
@@ -28,11 +28,11 @@ const MyStuffStack = createNativeStackNavigator();
 function MyStuffNavigator() {
   return (
     <MyStuffStack.Navigator screenOptions={{ headerShown: false }}>
-      <MyStuffStack.Screen name="AccountMain" component={AccountScreen} />
+      <MyStuffStack.Screen name="SavedMain" component={SavedScreen} />
       <MyStuffStack.Screen name="ListDetail" component={ListDetailScreen} />
       <MyStuffStack.Screen
         name="FavoritesDetail"
-        component={FavoritesDetailsScreen}
+        component={FavoritesDetailScreen}
       />
     </MyStuffStack.Navigator>
   );

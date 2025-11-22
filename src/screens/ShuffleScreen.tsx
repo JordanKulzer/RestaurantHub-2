@@ -1,11 +1,14 @@
 // src/screens/ShuffleScreen.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   StyleSheet,
   FlatList,
   TouchableOpacity,
   Dimensions,
+  Platform,
+  Linking,
+  Animated,
 } from "react-native";
 import {
   Button,
@@ -16,6 +19,8 @@ import {
   IconButton,
   MD3Theme,
   ProgressBar,
+  Modal,
+  Portal,
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -23,6 +28,7 @@ import {
   DropdownModal,
   QuickActionsMenu,
   UpgradeModal,
+  HomeSkeleton,
 } from "../components";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import Toast from "react-native-toast-message";
@@ -87,6 +93,10 @@ export default function ShuffleScreen() {
     useState<HomeRestaurant | null>(null);
   const [showDetails, setShowDetails] = useState(false);
 
+  // HOURS
+  const [hoursModalVisible, setHoursModalVisible] = useState(false);
+  const [selectedHours, setSelectedHours] = useState<string[]>([]);
+
   // UPGRADE
   const [shuffleCount, setShuffleCount] = useState(0);
   const [shuffleLastResetDate, setShuffleLastResetDate] = useState<string>("");
@@ -96,6 +106,12 @@ export default function ShuffleScreen() {
   // FAVORITES
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const isFocused = useIsFocused();
+
+  // Animation states
+  const animatedValues = useRef<Map<string, Animated.Value>>(new Map()).current;
+
+  const [showWinnerModal, setShowWinnerModal] = useState(false);
+  const [winner, setWinner] = useState<HomeRestaurant | null>(null);
 
   const accent = theme.colors.tertiary;
   const surface = theme.colors.surface;
@@ -118,6 +134,37 @@ export default function ShuffleScreen() {
     { label: "7", value: "7" },
     { label: "10", value: "10" },
   ];
+
+  const formatAddress = (address: string | null | undefined): string => {
+    if (!address) return "";
+
+    const parts = address.split(",").map((p) => p.trim());
+
+    if (parts.length >= 3) {
+      const stateZipPart = parts[2];
+      const stateMatch = stateZipPart.match(/^([A-Z]{2})/);
+
+      if (stateMatch) {
+        const state = stateMatch[1];
+        return `${parts[0]}, ${parts[1]}, ${state}`;
+      }
+    }
+
+    return address;
+  };
+
+  const getAnimatedValue = (id: string) => {
+    if (!animatedValues.has(id)) {
+      const newValue = new Animated.Value(1);
+      animatedValues.set(id, newValue);
+      return newValue;
+    }
+    return animatedValues.get(id)!;
+  };
+
+  const resetAnimatedValues = () => {
+    animatedValues.clear();
+  };
 
   useEffect(() => {
     const request = async () => {
@@ -252,6 +299,8 @@ export default function ShuffleScreen() {
     setPhase("choose-source");
     setShuffleSource(null);
     setShuffleLabel("");
+    setWinner(null);
+    resetAnimatedValues();
   };
 
   const incrementShuffleCount = async () => {
@@ -284,8 +333,8 @@ export default function ShuffleScreen() {
       source: "google",
       name: details?.name ?? fallback?.name ?? "Unknown",
       address:
-        details?.address ??
         details?.formatted_address ??
+        details?.address ??
         fallback?.address ??
         "",
       rating:
@@ -319,6 +368,7 @@ export default function ShuffleScreen() {
 
     setLoading(true);
     setNoResults(false);
+    setPhase("eliminate");
 
     try {
       const results =
@@ -336,8 +386,7 @@ export default function ShuffleScreen() {
       if (!subset.length) {
         setNoResults(true);
       } else {
-        setShuffleLabel("Random Shuffle");
-        setPhase("eliminate");
+        setShuffleLabel("Choose Your Winner");
       }
     } catch (e) {
       console.error("Google discovery error (surprise):", e);
@@ -355,7 +404,7 @@ export default function ShuffleScreen() {
     listIds: string[],
     listNames: string[]
   ) {
-    setShuffleLabel(`Shuffle Through: ${listNames.join(", ")}`);
+    setShuffleLabel("Choose Your Winner");
 
     const { data, error } = await supabase
       .from("list_items")
@@ -376,7 +425,6 @@ export default function ShuffleScreen() {
       return [] as HomeRestaurant[];
     }
 
-    // de-dupe by restaurant_id
     const byId: Record<string, any> = {};
     data.forEach((row: any) => {
       if (!byId[row.restaurant_id]) {
@@ -419,17 +467,19 @@ export default function ShuffleScreen() {
   async function handleSelectSource(key: ShuffleSource) {
     setShuffleSource(key);
     setNoResults(false);
+    setWinner(null);
+    resetAnimatedValues();
 
     if (key === "favorites") {
-      setShuffleLabel("Shuffle Through Your Favorites");
+      setShuffleLabel("Choose Your Winner");
       setLoading(true);
+      setPhase("eliminate");
 
       try {
         const favPointers = await getFavorites();
         if (!favPointers.length) {
           setRestaurants([]);
           setNoResults(true);
-          setPhase("eliminate");
           return;
         }
 
@@ -463,13 +513,11 @@ export default function ShuffleScreen() {
 
         setRestaurants(enriched);
         incrementShuffleCount();
-        setPhase("eliminate");
         setNoResults(false);
       } catch (e) {
         console.error("favorites load error:", e);
         setRestaurants([]);
         setNoResults(true);
-        setPhase("eliminate");
       } finally {
         setLoading(false);
       }
@@ -477,30 +525,29 @@ export default function ShuffleScreen() {
     }
 
     if (key === "liked") {
-      setShuffleLabel("Shuffle Through Liked");
+      setShuffleLabel("Choose Your Winner");
+      setPhase("eliminate");
 
       if (!likedPool.length) {
         setRestaurants([]);
         setNoResults(true);
-        setPhase("eliminate");
         return;
       }
 
       setRestaurants(likedPool);
       incrementShuffleCount();
-      setPhase("eliminate");
       setNoResults(false);
       return;
     }
 
     if (key === "lists") {
-      setShuffleLabel("Choose Lists");
+      setShuffleLabel("Choose Your Winner");
       setPhase("choose-source");
       return;
     }
 
     if (key === "filters") {
-      setShuffleLabel("Filter Restaurants");
+      setShuffleLabel("Choose Your Winner");
       setPhase("filters");
       return;
     }
@@ -559,6 +606,7 @@ export default function ShuffleScreen() {
 
     setLoading(true);
     setNoResults(false);
+    setPhase("eliminate");
 
     try {
       const results =
@@ -591,7 +639,6 @@ export default function ShuffleScreen() {
       setRestaurants(subset);
       if (!subset.length) setNoResults(true);
       else {
-        setPhase("eliminate");
         incrementShuffleCount();
       }
     } catch (err) {
@@ -609,17 +656,32 @@ export default function ShuffleScreen() {
   // -------------------------
   // ELIMINATION MODE
   // -------------------------
-
   const handleEliminate = (id: string) => {
-    const remaining = restaurants.filter((r) => r.id !== id);
-    setRestaurants(remaining);
+    const animValue = getAnimatedValue(id);
 
-    if (remaining.length === 1) {
-      Toast.show({
-        type: "success",
-        text1: `Winner: ${remaining[0].name}`,
-      });
-    }
+    Animated.parallel([
+      Animated.timing(animValue, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      const remaining = restaurants.filter((r) => r.id !== id);
+      setRestaurants(remaining);
+
+      if (remaining.length === 1) {
+        setWinner(remaining[0]);
+        setTimeout(() => {
+          setShowWinnerModal(true);
+        }, 300);
+      } else if (remaining.length === 0) {
+        Toast.show({
+          type: "info",
+          text1: "All restaurants eliminated!",
+          text2: "Start over to try again.",
+        });
+      }
+    });
   };
 
   const handleTryAgain = () => {
@@ -629,6 +691,8 @@ export default function ShuffleScreen() {
     setShuffleSource(null);
     setShuffleLabel("");
     setListsExpanded(false);
+    setWinner(null);
+    resetAnimatedValues();
   };
 
   // -------------------------
@@ -654,7 +718,6 @@ export default function ShuffleScreen() {
   // -------------------------
   // UI HELPERS
   // -------------------------
-
   const renderHeaderWithBack = () => (
     <View style={styles.headerRow}>
       <IconButton
@@ -671,6 +734,14 @@ export default function ShuffleScreen() {
           {String(shuffleLabel || "Elimination Round")}
         </Text>
       </View>
+
+      <IconButton
+        icon="refresh"
+        size={22}
+        onPress={handleTryAgain}
+        iconColor={theme.colors.tertiary}
+        style={{ marginLeft: "auto" }}
+      />
     </View>
   );
 
@@ -759,7 +830,8 @@ export default function ShuffleScreen() {
               marginBottom: 16,
             }}
           >
-            Pick where to shuffle from.
+            Pick where to shuffle from, then eliminate one by one to find your
+            winner!
           </Text>
 
           {/* FAVORITES */}
@@ -1075,7 +1147,7 @@ export default function ShuffleScreen() {
       )}
       {/* ELIMINATION MODE */}
       {phase === "eliminate" && (
-        <View style={styles.container}>
+        <View style={[styles.container, { flex: 0 }]}>
           {renderHeaderWithBack()}
 
           {noResults && restaurants.length === 0 ? (
@@ -1090,70 +1162,319 @@ export default function ShuffleScreen() {
               </Text>
             </View>
           ) : null}
+          {loading ? (
+            <View>
+              {Array.from({ length: parseInt(numberDisplayed) || 5 }).map(
+                (_, index) => (
+                  <HomeSkeleton key={index} />
+                )
+              )}
+            </View>
+          ) : (
+            <FlatList
+              data={restaurants}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingBottom: 24 }}
+              renderItem={({ item }) => {
+                const isFavorite = favoriteIds.has(item.id);
+                const imageUrl = getCardImage(item);
+                const animValue = getAnimatedValue(item.id);
 
-          <FlatList
-            data={restaurants}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingBottom: 24 }}
-            renderItem={({ item }) => {
-              const isFavorite = favoriteIds.has(item.id);
-              const imageUrl = getCardImage(item);
-
-              return (
-                <Card
-                  mode="elevated"
-                  style={[styles.card, { backgroundColor: surface }]}
-                >
-                  <Card.Title
-                    title={item.name}
-                    subtitle={safeSubtitle(item)}
-                    titleNumberOfLines={2}
-                    subtitleNumberOfLines={2}
-                    right={() => (
-                      <QuickActionsMenu
-                        restaurant={item}
-                        isFavorite={isFavorite}
-                        onFavoriteChange={refreshFavoriteIds}
-                        onCreateNewList={() => {}}
-                      />
-                    )}
-                  />
-
-                  {imageUrl && (
-                    <Card.Cover
-                      source={{ uri: imageUrl }}
-                      style={{
-                        height: CARD_PHOTO_HEIGHT,
-                        resizeMode: "cover",
-                      }}
-                    />
-                  )}
-
-                  <Card.Actions style={{ justifyContent: "space-between" }}>
-                    <Button
-                      textColor={accent}
-                      onPress={() => handleEliminate(item.id)}
+                return (
+                  <Animated.View
+                    style={{
+                      opacity: animValue,
+                      transform: [
+                        {
+                          scale: animValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.8, 1],
+                          }),
+                        },
+                        {
+                          translateX: animValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-50, 0],
+                          }),
+                        },
+                      ],
+                    }}
+                  >
+                    <Card
+                      mode="elevated"
+                      style={[
+                        styles.card,
+                        {
+                          backgroundColor: surface,
+                          marginBottom: 16,
+                          borderRadius: 10,
+                          overflow: "hidden",
+                        },
+                      ]}
                     >
-                      Eliminate
-                    </Button>
+                      {/* Rest of the card stays exactly the same */}
+                      <View style={{ position: "relative" }}>
+                        {imageUrl ? (
+                          <Card.Cover
+                            source={{ uri: imageUrl }}
+                            style={{
+                              width: "100%",
+                              height: 240,
+                              borderRadius: 10,
+                            }}
+                          />
+                        ) : (
+                          <Card.Cover
+                            source={{
+                              uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png",
+                            }}
+                            style={{
+                              width: "100%",
+                              height: 240,
+                              borderRadius: 10,
+                            }}
+                          />
+                        )}
+                        <LinearGradient
+                          colors={["transparent", "rgba(0,0,0,0.6)"]}
+                          style={StyleSheet.absoluteFillObject}
+                        />
 
-                    <Button onPress={() => handleViewDetails(item)}>
-                      View Details
-                    </Button>
-                  </Card.Actions>
-                </Card>
-              );
-            }}
-          />
+                        <View
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            right: 0,
+                            width: 50,
+                            height: 50,
+                            backgroundColor: theme.colors.secondary + "DD",
+                            borderBottomLeftRadius: 20,
+                            justifyContent: "center",
+                            alignItems: "center",
+                            elevation: 4,
+                            shadowColor: "#000",
+                            shadowOpacity: 0.3,
+                            shadowRadius: 4,
+                            shadowOffset: { width: 0, height: 2 },
+                          }}
+                        >
+                          <QuickActionsMenu
+                            restaurant={item}
+                            isFavorite={isFavorite}
+                            onFavoriteChange={refreshFavoriteIds}
+                            onCreateNewList={() => {}}
+                            preloadedLists={[]}
+                            listsReady={false}
+                          />
+                        </View>
+                      </View>
 
-          <Button
-            mode="contained"
-            onPress={handleTryAgain}
-            buttonColor={accent}
-            textColor="#fff"
-          >
-            Start Over
-          </Button>
+                      {/* Info Section */}
+                      <View style={{ padding: 16 }}>
+                        <Text
+                          style={{
+                            fontSize: 22,
+                            fontWeight: "700",
+                            marginBottom: 4,
+                            color: theme.colors.onSurface,
+                          }}
+                        >
+                          {item.name}
+                        </Text>
+
+                        {/* Meta Row - Rating, Reviews, Price */}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            marginBottom: 4,
+                          }}
+                        >
+                          {item.rating != null &&
+                            typeof item.rating === "number" && (
+                              <Text
+                                style={{
+                                  fontSize: 14,
+                                  marginRight: 6,
+                                  color: theme.colors.onSurface,
+                                }}
+                              >
+                                {`⭐ ${item.rating.toFixed(1)}`}
+                              </Text>
+                            )}
+
+                          {item.reviewCount != null && (
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                marginRight: 6,
+                                color: theme.colors.onSurface + "99",
+                              }}
+                            >
+                              {`(${item.reviewCount} reviews)`}
+                            </Text>
+                          )}
+
+                          {item.price != null && (
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                marginRight: 6,
+                                color: theme.colors.onSurface + "99",
+                              }}
+                            >
+                              {`• ${item.price}`}
+                            </Text>
+                          )}
+                        </View>
+
+                        {/* Hours Row */}
+                        {(item.isOpen !== null ||
+                          (item.hours && item.hours.length > 0)) && (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              marginVertical: 8,
+                            }}
+                          >
+                            {item.isOpen !== null &&
+                              item.isOpen !== undefined && (
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    color: item.isOpen
+                                      ? theme.colors.primary
+                                      : theme.colors.secondary,
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  {item.isOpen ? "Open now" : "Closed"}
+                                </Text>
+                              )}
+
+                            {item.hours && item.hours.length > 0 && (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setSelectedHours(item.hours || []);
+                                  setHoursModalVisible(true);
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    marginLeft: 8,
+                                    color: theme.colors.primary,
+                                    fontWeight: "600",
+                                    textDecorationLine: "underline",
+                                    fontSize: 14,
+                                  }}
+                                >
+                                  View Hours
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+
+                        {/* Address */}
+                        {item.address && (
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              marginBottom: 3,
+                              color: theme.colors.onSurface + "99",
+                            }}
+                          >
+                            {formatAddress(item.address)}
+                          </Text>
+                        )}
+
+                        {/* Distance */}
+                        {item.distanceMiles != null && (
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              marginBottom: 3,
+                              color: theme.colors.onSurface + "99",
+                            }}
+                          >
+                            {`${item.distanceMiles.toFixed(2)} mi away`}
+                          </Text>
+                        )}
+
+                        {!winner && (
+                          <Button
+                            mode="contained"
+                            onPress={() => handleEliminate(item.id)}
+                            buttonColor={theme.colors.error}
+                            textColor="#fff"
+                            style={{
+                              marginTop: 12,
+                              marginBottom: 8,
+                              borderRadius: 25,
+                            }}
+                            icon="close-circle-outline"
+                          >
+                            Eliminate
+                          </Button>
+                        )}
+
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            marginTop: 4,
+                            gap: 8,
+                          }}
+                        >
+                          <Button
+                            mode="outlined"
+                            icon="google-maps"
+                            textColor={theme.colors.primary}
+                            style={{
+                              flex: 1,
+                              borderRadius: 25,
+                              borderColor: theme.colors.primary,
+                            }}
+                            onPress={() => {
+                              const googleMapsUrl =
+                                item.googleMapsUrl ||
+                                `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                  item.address || item.name
+                                )}`;
+                              Linking.openURL(googleMapsUrl);
+                            }}
+                          >
+                            Google
+                          </Button>
+
+                          <Button
+                            mode="outlined"
+                            icon={Platform.OS === "ios" ? "map" : "map-marker"}
+                            textColor={theme.colors.tertiary}
+                            style={{
+                              flex: 1,
+                              borderRadius: 25,
+                              borderColor: theme.colors.tertiary,
+                            }}
+                            onPress={() => {
+                              const url = `http://maps.apple.com/?daddr=${encodeURIComponent(
+                                item.address || item.name
+                              )}`;
+                              Linking.openURL(url);
+                            }}
+                          >
+                            Apple
+                          </Button>
+                        </View>
+                      </View>
+                    </Card>
+                  </Animated.View>
+                );
+              }}
+            />
+          )}
         </View>
       )}
       <UpgradeModal
@@ -1175,6 +1496,299 @@ export default function ShuffleScreen() {
         onDismiss={() => setShowDetails(false)}
         restaurant={selectedRestaurant}
       />
+      <Portal>
+        <Modal
+          visible={hoursModalVisible}
+          onDismiss={() => setHoursModalVisible(false)}
+          contentContainerStyle={{
+            marginHorizontal: 24,
+            borderRadius: 16,
+            padding: 16,
+            backgroundColor: theme.colors.surface,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "700",
+              marginBottom: 8,
+              color: theme.colors.onSurface,
+            }}
+          >
+            Hours
+          </Text>
+
+          {selectedHours.length > 0 ? (
+            selectedHours.map((line, i) => (
+              <Text
+                key={i}
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  marginBottom: 4,
+                }}
+              >
+                {line}
+              </Text>
+            ))
+          ) : (
+            <Text style={{ color: theme.colors.onSurface + "99" }}>
+              Hours unavailable
+            </Text>
+          )}
+
+          <Button
+            mode="contained"
+            onPress={() => setHoursModalVisible(false)}
+            style={{ marginTop: 12 }}
+          >
+            Close
+          </Button>
+        </Modal>
+      </Portal>
+      {/* Winner Modal */}
+      <Portal>
+        <Modal
+          visible={showWinnerModal}
+          onDismiss={() => {
+            setShowWinnerModal(false);
+            setWinner(null);
+          }}
+          contentContainerStyle={{
+            marginHorizontal: 20,
+            borderRadius: 20,
+            padding: 0,
+            backgroundColor: theme.colors.surface,
+            overflow: "hidden",
+          }}
+        >
+          {winner && (
+            <View>
+              {/* Header with emoji */}
+              <View
+                style={{
+                  alignItems: "center",
+                  paddingTop: 24,
+                  paddingBottom: 16,
+                  borderBottomWidth: StyleSheet.hairlineWidth,
+                  borderBottomColor: theme.colors.outlineVariant,
+                }}
+              >
+                <Text style={{ fontSize: 48, marginBottom: 8 }}>🎉</Text>
+                <Text
+                  style={{
+                    fontSize: 24,
+                    fontWeight: "700",
+                    color: theme.colors.primary,
+                    textAlign: "center",
+                  }}
+                >
+                  Winner!
+                </Text>
+              </View>
+
+              {/* Restaurant Details */}
+              <View style={{ padding: 20 }}>
+                <Text
+                  style={{
+                    fontSize: 22,
+                    fontWeight: "700",
+                    color: theme.colors.onSurface,
+                    marginBottom: 8,
+                    textAlign: "center",
+                  }}
+                >
+                  {winner.name}
+                </Text>
+
+                {/* Meta Row - Rating, Reviews, Price */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexWrap: "wrap",
+                    marginBottom: 8,
+                  }}
+                >
+                  {winner.rating != null &&
+                    typeof winner.rating === "number" && (
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          marginRight: 6,
+                          color: theme.colors.onSurface,
+                        }}
+                      >
+                        {`⭐ ${winner.rating.toFixed(1)}`}
+                      </Text>
+                    )}
+
+                  {winner.reviewCount != null && (
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        marginRight: 6,
+                        color: theme.colors.onSurface + "99",
+                      }}
+                    >
+                      {`(${winner.reviewCount} reviews)`}
+                    </Text>
+                  )}
+
+                  {winner.price != null && (
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        color: theme.colors.onSurface + "99",
+                      }}
+                    >
+                      {`• ${winner.price}`}
+                    </Text>
+                  )}
+                </View>
+
+                {/* Hours Row */}
+                {(winner.isOpen !== null ||
+                  (winner.hours && winner.hours.length > 0)) && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginVertical: 8,
+                    }}
+                  >
+                    {winner.isOpen !== null && winner.isOpen !== undefined && (
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: winner.isOpen
+                            ? theme.colors.primary
+                            : theme.colors.secondary,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {winner.isOpen ? "Open now" : "Closed"}
+                      </Text>
+                    )}
+
+                    {winner.hours && winner.hours.length > 0 && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedHours(winner.hours || []);
+                          setHoursModalVisible(true);
+                        }}
+                      >
+                        <Text
+                          style={{
+                            marginLeft: 8,
+                            color: theme.colors.primary,
+                            fontWeight: "600",
+                            textDecorationLine: "underline",
+                            fontSize: 14,
+                          }}
+                        >
+                          View Hours
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+
+                {/* Address */}
+                {winner.address && (
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: theme.colors.onSurface + "99",
+                      textAlign: "center",
+                      marginBottom: 8,
+                    }}
+                  >
+                    {formatAddress(winner.address)}
+                  </Text>
+                )}
+
+                {/* Distance */}
+                {winner.distanceMiles != null && (
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: theme.colors.onSurface + "99",
+                      textAlign: "center",
+                      marginBottom: 16,
+                    }}
+                  >
+                    {`${winner.distanceMiles.toFixed(2)} mi away`}
+                  </Text>
+                )}
+
+                {/* Action Buttons */}
+                <View style={{ gap: 12, marginTop: 8 }}>
+                  {/* Map Buttons */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      gap: 8,
+                    }}
+                  >
+                    <Button
+                      mode="outlined"
+                      icon="google-maps"
+                      textColor={theme.colors.primary}
+                      onPress={() => {
+                        setShowWinnerModal(false);
+                        const googleMapsUrl =
+                          winner.googleMapsUrl ||
+                          `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                            winner.address || winner.name
+                          )}`;
+                        Linking.openURL(googleMapsUrl);
+                      }}
+                      style={[
+                        styles.linkButton,
+                        { borderColor: theme.colors.primary },
+                      ]}
+                    >
+                      Google
+                    </Button>
+
+                    <Button
+                      mode="outlined"
+                      icon={Platform.OS === "ios" ? "map" : "map-marker"}
+                      textColor={theme.colors.tertiary}
+                      onPress={() => {
+                        setShowWinnerModal(false);
+                        const url = `http://maps.apple.com/?daddr=${encodeURIComponent(
+                          winner.address || winner.name
+                        )}`;
+                        Linking.openURL(url);
+                      }}
+                      style={[
+                        styles.linkButton,
+                        { borderColor: theme.colors.tertiary },
+                      ]}
+                    >
+                      Apple
+                    </Button>
+                  </View>
+
+                  <Button
+                    mode="text"
+                    onPress={() => {
+                      setShowWinnerModal(false);
+                      setWinner(null);
+                    }}
+                    textColor={theme.colors.onSurfaceVariant}
+                  >
+                    Close
+                  </Button>
+                </View>
+              </View>
+            </View>
+          )}
+        </Modal>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -1228,6 +1842,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     paddingVertical: 6,
   },
+  linkButton: { flex: 1, borderRadius: 25 },
 });
 
 export const dyn = {

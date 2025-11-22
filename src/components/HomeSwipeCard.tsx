@@ -23,12 +23,18 @@ import ImageViewing from "react-native-image-viewing";
 
 import { HomeRestaurant } from "../types/homeRestaurant";
 import { fetchRestaurantInfo } from "../utils/fetchRestaurantInfo";
+import QuickActionsMenu from "./QuickActionsMenu";
 
 interface HomeSwipeCardProps {
   restaurant: HomeRestaurant;
   onLike?: () => void;
   onDislike?: () => void;
   onUndo?: () => void;
+  isFavorite: boolean;
+  onFavoriteChange: () => void;
+  onCreateNewList: (callback?: (list: any) => void) => void;
+  preloadedLists: any[];
+  listsReady: boolean;
 }
 
 export default function HomeSwipeCard({
@@ -36,6 +42,11 @@ export default function HomeSwipeCard({
   onLike,
   onDislike,
   onUndo,
+  isFavorite,
+  onFavoriteChange,
+  onCreateNewList,
+  preloadedLists,
+  listsReady,
 }: HomeSwipeCardProps) {
   const theme = useTheme();
 
@@ -59,6 +70,24 @@ export default function HomeSwipeCard({
   const dislikeScale = useRef(new Animated.Value(1)).current;
   const undoScale = useRef(new Animated.Value(1)).current;
 
+  const formatAddress = (address: string | null | undefined): string => {
+    if (!address) return "";
+
+    const parts = address.split(",").map((p) => p.trim());
+
+    if (parts.length >= 3) {
+      const stateZipPart = parts[2];
+      const stateMatch = stateZipPart.match(/^([A-Z]{2})/);
+
+      if (stateMatch) {
+        const state = stateMatch[1];
+        return `${parts[0]}, ${parts[1]}, ${state}`;
+      }
+    }
+
+    return address;
+  };
+
   const pulse = (anim: Animated.Value, callback?: () => void) => {
     Animated.sequence([
       Animated.timing(anim, {
@@ -75,59 +104,6 @@ export default function HomeSwipeCard({
       }),
     ]).start(() => callback && callback());
   };
-
-  // useEffect(() => {
-  //   let mounted = true;
-
-  //   const loadFullDetails = async () => {
-  //     try {
-  //       const details = await fetchRestaurantInfo(
-  //         restaurant.source,
-  //         restaurant.id
-  //       );
-
-  //       if (!mounted || !details) return;
-
-  //       const enriched: HomeRestaurant = {
-  //         ...restaurant,
-  //         photos:
-  //           details.photos && details.photos.length > 0
-  //             ? details.photos
-  //             : restaurant.photos,
-  //         rating: details.rating ?? restaurant.rating,
-  //         reviewCount: details.reviewCount ?? restaurant.reviewCount,
-  //         price: details.price ?? restaurant.price,
-  //         address: details.address ?? restaurant.address,
-  //         yelpUrl: details.yelpUrl ?? restaurant.yelpUrl,
-  //         googleMapsUrl: details.googleMapsUrl ?? restaurant.googleMapsUrl,
-  //       };
-
-  //       if (enriched.photos && enriched.photos.length > 0) {
-  //         setPhotos(enriched.photos);
-  //       }
-
-  //       const detailsWithHours = details as any;
-  //       if (detailsWithHours.hours) {
-  //         setHours(
-  //           Array.isArray(detailsWithHours.hours) ? detailsWithHours.hours : []
-  //         );
-  //       }
-  //       if (typeof detailsWithHours.isOpen === "boolean") {
-  //         setIsOpen(detailsWithHours.isOpen);
-  //       }
-  //     } catch (err) {
-  //       console.warn(
-  //         `Failed to fetch full details for ${restaurant.name}`,
-  //         err
-  //       );
-  //     }
-  //   };
-
-  //   loadFullDetails();
-  //   return () => {
-  //     mounted = false;
-  //   };
-  // }, [restaurant.id]);
 
   const handleNextPhoto = () => {
     if (photos.length <= 1) return;
@@ -155,6 +131,34 @@ export default function HomeSwipeCard({
           colors={["transparent", "rgba(0,0,0,0.6)"]}
           style={StyleSheet.absoluteFillObject}
         />
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            width: 50,
+            height: 50,
+            backgroundColor: theme.colors.secondary + "DD",
+            borderBottomLeftRadius: 20,
+            justifyContent: "center",
+            alignItems: "center",
+            elevation: 4,
+            shadowColor: "#000",
+            shadowOpacity: 0.3,
+            shadowRadius: 4,
+            shadowOffset: { width: 0, height: 2 },
+          }}
+          pointerEvents="box-none"
+        >
+          <QuickActionsMenu
+            restaurant={restaurant}
+            isFavorite={isFavorite}
+            onFavoriteChange={onFavoriteChange}
+            onCreateNewList={onCreateNewList}
+            preloadedLists={preloadedLists}
+            listsReady={listsReady}
+          />
+        </View>
         {photos.length > 1 && (
           <View style={styles.photoIndicator}>
             <Text style={styles.photoIndicatorText}>
@@ -168,7 +172,7 @@ export default function HomeSwipeCard({
             { backgroundColor: theme.colors.secondary + "CC" },
           ]}
         >
-          <Text style={styles.hintText}>Tap for more photos</Text>
+          <Text style={styles.hintText}>Tap photo for more</Text>
         </View>
       </TouchableOpacity>
 
@@ -241,7 +245,7 @@ export default function HomeSwipeCard({
           <Text
             style={[styles.detail, { color: theme.colors.onSurface + "99" }]}
           >
-            {restaurant.address}
+            {formatAddress(restaurant.address)}
           </Text>
         )}
 

@@ -53,6 +53,20 @@ export async function createList(
     .single();
 
   if (error) throw error;
+
+  const { error: collabError } = await supabase
+    .from("list_collaborators")
+    .insert({
+      list_id: data.id,
+      user_id: userId,
+      role: "owner",
+    });
+
+  if (collabError) {
+    console.error("❌ Failed to add owner as collaborator:", collabError);
+    throw collabError;
+  }
+
   return data;
 }
 

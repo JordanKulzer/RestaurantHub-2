@@ -23,13 +23,15 @@ export default function UpgradeModal({
       <Modal
         visible={visible}
         onDismiss={onDismiss}
+        dismissable={false}
+        dismissableBackButton={false}
         contentContainerStyle={[
           styles.container,
           { backgroundColor: theme.colors.surface },
         ]}
       >
         <Text style={[styles.title, { color: theme.colors.primary }]}>
-          ✨ Unlock Unlimited Swipes
+          ✨ Unlock Unlimited Swipes and Shuffles
         </Text>
 
         <Text style={[styles.subtitle, { color: theme.colors.onSurface }]}>
@@ -39,7 +41,7 @@ export default function UpgradeModal({
         <View style={styles.list}>
           {[
             "Unlimited swipes every day",
-            "Unlimited rewinds",
+            "Unlimited shuffles",
             "Advanced filters",
             "Save unlimited favorites",
           ].map((t, i) => (
@@ -61,22 +63,23 @@ export default function UpgradeModal({
           buttonColor={theme.colors.primary}
           style={styles.button}
         >
-          Upgrade to Premium - $4.99/month
+          Upgrade to Premium: $4.99/month
         </Button>
 
         <Button
           mode="text"
           textColor={theme.colors.onSurface + "99"}
           onPress={() => {
-            if (onMaybeLater) onMaybeLater(); // <-- use custom behavior
-            else onDismiss(); // fallback to old behavior
+            if (onMaybeLater) onMaybeLater();
+            else onDismiss();
           }}
+          style={styles.maybeLater}
         >
           Maybe Later
         </Button>
 
         <Text style={[styles.note, { color: theme.colors.onSurface + "66" }]}>
-          Free swipes reset daily at midnight
+          Free swipes/shuffles reset daily at midnight
         </Text>
       </Modal>
     </Portal>
@@ -90,12 +93,18 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: "center",
   },
-  title: { fontSize: 26, fontWeight: "700", marginBottom: 8 },
+  title: {
+    fontSize: 26,
+    fontWeight: "700",
+    marginBottom: 8,
+    alignItems: "center",
+  },
   subtitle: { fontSize: 16, marginBottom: 24, textAlign: "center" },
   list: { width: "100%", marginBottom: 24 },
   item: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   icon: { fontSize: 22, marginRight: 12 },
   text: { fontSize: 16 },
   button: { width: "100%", borderRadius: 25, paddingVertical: 4 },
+  maybeLater: { width: "100%", borderRadius: 25, paddingTop: 10 },
   note: { fontSize: 12, marginTop: 16, textAlign: "center" },
 });

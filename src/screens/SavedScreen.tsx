@@ -1,4 +1,4 @@
-// src/screens/AccountScreen.tsx
+// src/screens/SavedScreen.tsx
 import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
@@ -20,12 +20,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-
 import CreateListModal from "../components/CreateListModal";
 import { getLists, ListWithCount } from "../utils/listsApi";
 import { getFavorites } from "../utils/favoritesApis";
+import { AccountModal, ListSkeleton } from "../components";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useThemeMode } from "../contexts/ThemeContext";
 
-// Special type for the Favorites "list"
 interface FavoritesItem {
   id: "favorites";
   title: "Favorites";
@@ -36,15 +37,17 @@ interface FavoritesItem {
 
 type CombinedListItem = ListWithCount | FavoritesItem;
 
-export default function AccountScreen() {
+export default function SavedScreen() {
   const theme = useTheme();
   const navigation: any = useNavigation();
   const isFocused = useIsFocused();
+  const { isDarkMode, setThemeMode } = useThemeMode();
 
   const [lists, setLists] = useState<ListWithCount[]>([]);
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [loadingLists, setLoadingLists] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
 
   const loadLists = useCallback(async () => {
     try {
@@ -85,6 +88,10 @@ export default function AccountScreen() {
     },
     ...lists,
   ];
+
+  const toggleDarkMode = () => {
+    setThemeMode(isDarkMode ? "light" : "dark");
+  };
 
   const renderListCard = ({ item }: { item: CombinedListItem }) => {
     const isFavorites = "isFavorites" in item && item.isFavorites;
@@ -205,15 +212,14 @@ export default function AccountScreen() {
               My Stuff
             </Text>
             <IconButton
-              icon="cog-outline"
-              size={24}
+              icon="account-circle-outline"
+              size={28}
               iconColor={theme.colors.onBackground}
-              onPress={() => console.log("Open settings / account")}
+              onPress={() => setShowAccountModal(true)}
             />
           </View>
         </View>
 
-        {/* Combined Lists Section */}
         <View style={styles.sectionHeaderRow}>
           <Text
             style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
@@ -222,6 +228,7 @@ export default function AccountScreen() {
           </Text>
           {lists.length > 0 && (
             <Button
+              icon="plus"
               mode="text"
               compact
               textColor={theme.colors.primary}
@@ -233,24 +240,13 @@ export default function AccountScreen() {
         </View>
 
         {loadingLists ? (
-          <Surface
-            style={[
-              styles.emptySurface,
-              { backgroundColor: theme.colors.surface },
-            ]}
-          >
-            <Text
-              style={[
-                styles.emptyText,
-                { color: theme.colors.onSurfaceVariant },
-              ]}
-            >
-              Loading your lists...
-            </Text>
-          </Surface>
+          <View>
+            {Array.from({ length: 3 }).map((_, index) => (
+              <ListSkeleton key={index} />
+            ))}
+          </View>
         ) : lists.length === 0 ? (
           <>
-            {/* Show Favorites card even when no lists */}
             <FlatList
               data={[
                 {
@@ -313,74 +309,18 @@ export default function AccountScreen() {
             contentContainerStyle={{ paddingHorizontal: 16 }}
           />
         )}
-
-        {/* Account / Logout Section */}
-        <Text
-          style={[
-            styles.sectionTitle,
-            { color: theme.colors.onSurface, marginLeft: 16 },
-          ]}
-        >
-          Account
-        </Text>
-        <Surface
-          style={[
-            styles.accountCard,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.outline,
-            },
-          ]}
-          mode="flat"
-        >
-          <View style={styles.accountRow}>
-            <Avatar.Icon
-              size={46}
-              icon="email-outline"
-              color={theme.colors.surface}
-              style={{ backgroundColor: theme.colors.primary }}
-            />
-            <View style={{ marginLeft: 10, flex: 1 }}>
-              <Text
-                style={{
-                  fontWeight: "600",
-                  color: theme.colors.onSurface,
-                  fontSize: 15,
-                }}
-              >
-                Account & Settings
-              </Text>
-              <Text
-                style={{
-                  color: theme.colors.onSurfaceVariant,
-                  fontSize: 13,
-                  marginTop: 2,
-                }}
-              >
-                Manage your profile and sign out.
-              </Text>
-            </View>
-          </View>
-          <Button
-            icon="logout"
-            mode="outlined"
-            textColor={theme.colors.secondary}
-            style={{
-              marginTop: 10,
-              borderColor: theme.colors.secondary,
-              borderRadius: 999,
-            }}
-            onPress={() => console.log("Logout pressed")}
-          >
-            Log out
-          </Button>
-        </Surface>
       </ScrollView>
 
       <CreateListModal
         visible={showCreateModal}
         onDismiss={() => setShowCreateModal(false)}
         onCreated={loadLists}
+      />
+      <AccountModal
+        visible={showAccountModal}
+        onDismiss={() => setShowAccountModal(false)}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={toggleDarkMode}
       />
     </SafeAreaView>
   );
