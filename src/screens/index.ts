@@ -9,3 +9,4 @@ export { default as ListDetailScreen } from "./ListDetailScreen";
 export { default as AccountScreen } from "./AccountScreen";
 export { default as RestaurantDetailScreen } from "./RestaurantDetailScreen";
 export { default as FavoritesDetailsScreen } from "./FavoritesDetailsScreen";
+export { default as JoinListScreen } from "./JoinListScreen";

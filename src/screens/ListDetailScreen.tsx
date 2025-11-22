@@ -18,6 +18,7 @@ import {
   Portal,
   Modal,
   TextInput,
+  Badge,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -27,9 +28,13 @@ import { fetchRestaurantDetails } from "../utils/placesApi";
 import QuickActionsMenu from "../components/QuickActionsMenu";
 import { getFavorites } from "../utils/favoritesApis";
 import RestaurantDetailModal from "../components/RestaurantDetailModal";
-import { deleteList, updateList } from "../utils/listsApi";
+import { deleteList, updateList, getLists } from "../utils/listsApi";
+import ShareListModal from "../components/ShareListModal";
 import { theme } from "../theme";
 import { getLocationCached } from "../utils/locationHelper";
+import { useIsFocused } from "@react-navigation/native";
+import { useRealtimeList, useListPresence } from "../hooks/useRealtimeList";
+import { getUserRoleInList, leaveList } from "../utils/collaborationApi";
 
 interface ListCardProps {
   item: any;
@@ -42,6 +47,8 @@ interface ListCardProps {
   openInAppleMaps: (restaurant: any) => void;
   handleRemove: (itemId: string) => void;
   openNoteEditor: (itemId: string, currentNote: string | null) => void;
+  listsCache: any[];
+  userRole: "owner" | "editor" | "viewer" | null;
 }
 
 const EARTH_RADIUS_METERS = 6371000;
@@ -105,6 +112,7 @@ export default function ListDetailScreen({ route, navigation }: any) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
   const [deleteVisible, setDeleteVisible] = useState(false);
+  const [shareVisible, setShareVisible] = useState(false);
 
   const [editTitle, setEditTitle] = useState(title);
   const [editDescription, setEditDescription] = useState("");
@@ -117,11 +125,67 @@ export default function ListDetailScreen({ route, navigation }: any) {
   });
   const hasEnrichedRef = React.useRef(false);
 
-  // Restaurant notes state
   const [editingNoteForItem, setEditingNoteForItem] = useState<string | null>(
     null
   );
   const [noteText, setNoteText] = useState("");
+  const [listsCache, setListsCache] = useState<any[]>([]);
+  const [listsLoaded, setListsLoaded] = useState(false);
+  const [userRole, setUserRole] = useState<
+    "owner" | "editor" | "viewer" | null
+  >(null);
+
+  const isFocused = useIsFocused();
+
+  // ✅ Real-time subscription
+  const { isConnected } = useRealtimeList({
+    listId,
+    onItemAdded: (item) => {
+      console.log("🔵 Real-time: Item added", item);
+      loadItems(); // Reload items when new one is added
+    },
+    onItemUpdated: (item) => {
+      console.log("🟡 Real-time: Item updated", item);
+      // Update the specific item in state
+      setItems((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, ...item } : i))
+      );
+    },
+    onItemDeleted: (itemId) => {
+      console.log("🔴 Real-time: Item deleted", itemId);
+      setItems((prev) => prev.filter((i) => i.id !== itemId));
+    },
+    onListUpdated: (list) => {
+      console.log("📝 Real-time: List updated", list);
+      setListInfo({ title: list.title, description: list.description });
+      navigation.setParams({ title: list.title });
+    },
+  });
+
+  // ✅ Presence tracking
+  const { activeUsers } = useListPresence(listId);
+
+  useEffect(() => {
+    if (isFocused) {
+      preloadLists();
+      loadUserRole();
+    }
+  }, [isFocused]);
+
+  const preloadLists = async () => {
+    try {
+      const data = await getLists();
+      setListsCache(data);
+      setListsLoaded(true);
+    } catch (e) {
+      console.error("❌ Failed to preload lists:", e);
+    }
+  };
+
+  const loadUserRole = async () => {
+    const role = await getUserRoleInList(listId);
+    setUserRole(role);
+  };
 
   const loadItems = async () => {
     const { data, error } = await supabase
@@ -254,6 +318,11 @@ export default function ListDetailScreen({ route, navigation }: any) {
   }, [enrichItems]);
 
   const handleRemove = async (itemId: string) => {
+    if (userRole === "viewer") {
+      alert("You don't have permission to remove items");
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from("list_items")
@@ -269,6 +338,11 @@ export default function ListDetailScreen({ route, navigation }: any) {
   };
 
   const handleSaveNote = async (itemId: string, note: string) => {
+    if (userRole === "viewer") {
+      alert("You don't have permission to edit notes");
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from("list_items")
@@ -291,6 +365,10 @@ export default function ListDetailScreen({ route, navigation }: any) {
   };
 
   const openNoteEditor = (itemId: string, currentNote: string | null) => {
+    if (userRole === "viewer") {
+      alert("You don't have permission to edit notes");
+      return;
+    }
     setEditingNoteForItem(itemId);
     setNoteText(currentNote || "");
   };
@@ -357,6 +435,15 @@ export default function ListDetailScreen({ route, navigation }: any) {
     setSelectedRestaurant(e);
   };
 
+  const handleLeaveList = async () => {
+    const success = await leaveList(listId);
+    if (success) {
+      navigation.goBack();
+    } else {
+      alert("Failed to leave list");
+    }
+  };
+
   const ListCard = ({
     item,
     theme,
@@ -368,6 +455,8 @@ export default function ListDetailScreen({ route, navigation }: any) {
     openInAppleMaps,
     handleRemove,
     openNoteEditor,
+    listsCache,
+    userRole,
   }: ListCardProps) => {
     const e = item.enriched;
 
@@ -382,7 +471,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
           },
         ]}
       >
-        {/* Info Section */}
         <View style={styles.infoSection}>
           <View style={styles.rowTop}>
             <View style={{ flex: 1, paddingRight: 8 }}>
@@ -393,7 +481,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
                 {e?.name ?? item.restaurant_name}
               </Text>
 
-              {/* Rating + reviews */}
               <View style={styles.metaRow}>
                 {e?.rating != null && (
                   <Text
@@ -415,7 +502,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
                 )}
               </View>
 
-              {/* Hours */}
               <View style={styles.hoursRow}>
                 {e?.isOpen != null && (
                   <Text
@@ -448,7 +534,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
                 )}
               </View>
 
-              {/* Address */}
               {e?.address && (
                 <Text
                   style={[
@@ -460,7 +545,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
                 </Text>
               )}
 
-              {/* Distance */}
               {e?.distanceMiles != null && (
                 <Text
                   style={[
@@ -471,25 +555,26 @@ export default function ListDetailScreen({ route, navigation }: any) {
                   {e.distanceMiles.toFixed(2)} mi away
                 </Text>
               )}
-
-              {/* Restaurant Notes */}
             </View>
 
-            {/* Action Menu */}
             {e && (
               <QuickActionsMenu
                 restaurant={e}
                 isFavorite={isFavorite}
                 onFavoriteChange={onFavoriteChange}
+                preloadedLists={listsCache}
+                listsReady={true}
                 onCreateNewList={() => {}}
               />
             )}
           </View>
-          {/* FULL-WIDTH BLOCKS (belong OUTSIDE rowTop) */}
+
           {item.notes && (
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => openNoteEditor(item.id, item.notes)}
+              onPress={() =>
+                userRole !== "viewer" && openNoteEditor(item.id, item.notes)
+              }
               style={{
                 marginTop: 14,
                 width: "100%",
@@ -514,21 +599,23 @@ export default function ListDetailScreen({ route, navigation }: any) {
                 {item.notes}
               </Text>
 
-              <View style={{ position: "absolute", top: 6, right: 6 }}>
-                <IconButton
-                  icon="pencil"
-                  size={18}
-                  onPress={() => openNoteEditor(item.id, item.notes)}
-                  iconColor={
-                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface
-                  }
-                  style={{ margin: 0 }}
-                />
-              </View>
+              {userRole !== "viewer" && (
+                <View style={{ position: "absolute", top: 6, right: 6 }}>
+                  <IconButton
+                    icon="pencil"
+                    size={18}
+                    onPress={() => openNoteEditor(item.id, item.notes)}
+                    iconColor={
+                      theme.colors.onSurfaceVariant ?? theme.colors.onSurface
+                    }
+                    style={{ margin: 0 }}
+                  />
+                </View>
+              )}
             </TouchableOpacity>
           )}
 
-          {!item.notes && (
+          {!item.notes && userRole !== "viewer" && (
             <TouchableOpacity
               activeOpacity={0.9}
               onPress={() => openNoteEditor(item.id, null)}
@@ -571,7 +658,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
             </TouchableOpacity>
           )}
 
-          {/* Maps Buttons */}
           <View style={styles.linkRow}>
             <Button
               mode="outlined"
@@ -617,6 +703,8 @@ export default function ListDetailScreen({ route, navigation }: any) {
         openInAppleMaps={openInAppleMaps}
         handleRemove={handleRemove}
         openNoteEditor={openNoteEditor}
+        listsCache={listsCache}
+        userRole={userRole}
       />
     );
   };
@@ -645,7 +733,24 @@ export default function ListDetailScreen({ route, navigation }: any) {
           iconColor={theme.colors.onSurface}
         />
 
-        <Text style={styles.headerTitle}>{title}</Text>
+        <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+          <Text style={styles.headerTitle}>{listInfo.title}</Text>
+          {activeUsers.length > 1 && (
+            <Badge
+              size={20}
+              style={{ backgroundColor: theme.colors.primary, marginLeft: 8 }}
+            >
+              {activeUsers.length}
+            </Badge>
+          )}
+        </View>
+
+        <IconButton
+          icon="share-variant"
+          size={24}
+          onPress={() => setShareVisible(true)}
+          iconColor={theme.colors.tertiary}
+        />
 
         <IconButton
           icon="dots-vertical"
@@ -715,7 +820,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
       />
 
-      {/* Hours Modal */}
       <Portal>
         <Modal
           visible={hoursVisible}
@@ -762,6 +866,14 @@ export default function ListDetailScreen({ route, navigation }: any) {
         restaurant={selectedRestaurant}
       />
 
+      <ShareListModal
+        visible={shareVisible}
+        onDismiss={() => setShareVisible(false)}
+        listId={listId}
+        listTitle={listInfo.title}
+        isOwner={userRole === "owner"}
+      />
+
       <Portal>
         <Modal
           visible={menuVisible}
@@ -779,38 +891,62 @@ export default function ListDetailScreen({ route, navigation }: any) {
             List Options
           </Text>
 
-          <Button
-            mode="contained-tonal"
-            onPress={() => {
-              setMenuVisible(false);
-              setEditVisible(true);
-            }}
-            style={{
-              marginBottom: 12,
-              backgroundColor: theme.colors.tertiary,
-              borderRadius: 12,
-              paddingVertical: 6,
-            }}
-            textColor={theme.colors.surface}
-          >
-            Edit List
-          </Button>
+          {userRole === "owner" && (
+            <>
+              <Button
+                mode="contained-tonal"
+                onPress={() => {
+                  setMenuVisible(false);
+                  setEditVisible(true);
+                }}
+                style={{
+                  marginBottom: 12,
+                  backgroundColor: theme.colors.tertiary,
+                  borderRadius: 12,
+                  paddingVertical: 6,
+                }}
+                textColor={theme.colors.surface}
+              >
+                Edit List
+              </Button>
 
-          <Button
-            mode="contained-tonal"
-            style={{
-              backgroundColor: theme.colors.secondary,
-              borderRadius: 12,
-              paddingVertical: 6,
-            }}
-            textColor={theme.colors.surface}
-            onPress={() => {
-              setMenuVisible(false);
-              setDeleteVisible(true);
-            }}
-          >
-            Delete List
-          </Button>
+              <Button
+                mode="contained-tonal"
+                style={{
+                  backgroundColor: theme.colors.secondary,
+                  borderRadius: 12,
+                  paddingVertical: 6,
+                  marginBottom: 12,
+                }}
+                textColor={theme.colors.surface}
+                onPress={() => {
+                  setMenuVisible(false);
+                  setDeleteVisible(true);
+                }}
+              >
+                Delete List
+              </Button>
+            </>
+          )}
+
+          {userRole !== "owner" && (
+            <Button
+              mode="contained-tonal"
+              icon="exit-to-app"
+              style={{
+                backgroundColor: theme.colors.secondary,
+                borderRadius: 12,
+                paddingVertical: 6,
+              }}
+              textColor={theme.colors.surface}
+              onPress={() => {
+                setMenuVisible(false);
+                handleLeaveList();
+              }}
+            >
+              Leave List
+            </Button>
+          )}
         </Modal>
       </Portal>
 
@@ -945,7 +1081,6 @@ export default function ListDetailScreen({ route, navigation }: any) {
         </Modal>
       </Portal>
 
-      {/* Restaurant Note Editor Modal */}
       <Portal>
         <Modal
           visible={!!editingNoteForItem}
@@ -1073,7 +1208,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   headerTitle: {
-    flex: 1,
     textAlign: "center",
     fontSize: 20,
     fontWeight: "700",

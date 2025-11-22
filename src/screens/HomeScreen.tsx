@@ -37,6 +37,7 @@ import { getFavorites } from "../utils/favoritesApis";
 import { fetchRestaurantInfo } from "../utils/fetchRestaurantInfo";
 import { RestaurantCard } from "../types/restaurant";
 import { getLocationCached } from "../utils/locationHelper";
+import { getLists } from "../utils/listsApi";
 
 if (
   Platform.OS === "android" &&
@@ -84,9 +85,30 @@ export default function HomeScreen() {
   const [swipeCount, setSwipeCount] = useState(0);
   const [lastResetDate, setLastResetDate] = useState<string>("");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [isPremium, setIsPremium] = useState(false); // TODO: Connect to your auth/subscription system
+  const [isPremium, setIsPremium] = useState(false);
+
+  // ✅ Preload lists data for QuickActionsMenu
+  const [listsCache, setListsCache] = useState<any[]>([]);
+  const [listsLoaded, setListsLoaded] = useState(false);
 
   const isFocused = useIsFocused();
+
+  // ✅ Preload lists when screen is focused
+  useEffect(() => {
+    if (isFocused) {
+      preloadLists();
+    }
+  }, [isFocused]);
+
+  const preloadLists = async () => {
+    try {
+      const data = await getLists();
+      setListsCache(data);
+      setListsLoaded(true);
+    } catch (e) {
+      console.error("❌ Failed to preload lists:", e);
+    }
+  };
 
   // Check and reset daily swipe count
   useEffect(() => {
@@ -463,6 +485,17 @@ export default function HomeScreen() {
     setCreateListVisible(true);
   };
 
+  // ✅ Refresh lists cache after creating a new list
+  const handleListCreated = async (newList: any) => {
+    setCreateListVisible(false);
+    await preloadLists(); // Refresh the cache
+
+    if (pendingListCallback) {
+      pendingListCallback(newList);
+      setPendingListCallback(null);
+    }
+  };
+
   const swipesRemaining = Math.max(0, FREE_DAILY_SWIPES - swipeCount);
 
   const showSwipeCounter = !isPremium && swipesRemaining <= 10;
@@ -504,6 +537,8 @@ export default function HomeScreen() {
                   isFavorite={favoritesIds.has(currentRestaurant.id)}
                   onFavoriteChange={refreshFavorites}
                   onCreateNewList={handleOpenCreateList}
+                  preloadedLists={listsCache}
+                  listsReady={listsLoaded}
                 />
               ) : (
                 <View style={{ width: 40, height: 55 }} />
@@ -692,8 +727,6 @@ export default function HomeScreen() {
             <Animated.View
               style={{
                 flex: 1,
-                // marginTop: 10,
-                // marginBottom: 120,
                 opacity: initialLoad ? fadeAnim : 1,
                 transform: initialLoad
                   ? [
@@ -783,14 +816,7 @@ export default function HomeScreen() {
         <CreateListModal
           visible={createListVisible}
           onDismiss={() => setCreateListVisible(false)}
-          onCreated={(newList) => {
-            setCreateListVisible(false);
-
-            if (pendingListCallback) {
-              pendingListCallback(newList);
-              setPendingListCallback(null);
-            }
-          }}
+          onCreated={handleListCreated}
         />
       </View>
     </SafeAreaView>

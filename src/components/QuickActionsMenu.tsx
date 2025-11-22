@@ -19,6 +19,8 @@ interface Props {
   isFavorite: boolean;
   onFavoriteChange?: () => void;
   onCreateNewList: (onCreated: (newList: any) => void) => void;
+  preloadedLists?: any[]; // ✅ Accept preloaded lists from parent
+  listsReady?: boolean; // ✅ Flag to indicate lists are ready
 }
 
 type ListRow = {
@@ -41,28 +43,35 @@ export default function QuickActionsMenu({
   isFavorite,
   onFavoriteChange,
   onCreateNewList,
+  preloadedLists = [],
+  listsReady = false,
 }: Props) {
   const theme = useTheme();
   const [visible, setVisible] = useState(false);
-  const [lists, setLists] = useState<ListRow[]>([]);
+  const [lists, setLists] = useState<ListRow[]>(preloadedLists);
   const [memberships, setMemberships] = useState<MembershipMap>({});
-  const [loadingLists, setLoadingLists] = useState(false);
+  const [loadingLists, setLoadingLists] = useState(!listsReady);
 
+  // ✅ Use preloaded lists from parent
   useEffect(() => {
-    if (visible) {
-      loadListsAndMemberships();
+    if (preloadedLists.length > 0) {
+      setLists(preloadedLists);
+      setLoadingLists(false);
     }
-  }, [visible, restaurant?.id]);
+  }, [preloadedLists]);
+
+  // ✅ Load memberships when restaurant changes
+  useEffect(() => {
+    if (restaurant?.id) {
+      loadMemberships();
+    }
+  }, [restaurant?.id]);
 
   const openMenu = () => setVisible(true);
   const closeMenu = () => setVisible(false);
 
-  const loadListsAndMemberships = async () => {
+  const loadMemberships = async () => {
     try {
-      setLoadingLists(true);
-      const data = await getLists();
-      setLists(data);
-
       const pointer = toPointer(restaurant);
 
       const { data: listItems, error } = await supabase
@@ -82,9 +91,7 @@ export default function QuickActionsMenu({
       });
       setMemberships(map);
     } catch (e) {
-      console.error("❌ getLists/memberships failed:", e);
-    } finally {
-      setLoadingLists(false);
+      console.error("❌ memberships query failed:", e);
     }
   };
 

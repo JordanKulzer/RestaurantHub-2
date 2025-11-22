@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, Linking } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useTheme } from "react-native-paper";
 import { supabase } from "../utils/supabaseClient";
-
 import {
   HomeScreen,
   ShuffleScreen,
@@ -16,8 +15,8 @@ import {
   ListDetailScreen,
   RestaurantDetailScreen,
   FavoritesDetailsScreen,
+  JoinListScreen,
 } from "../screens";
-
 import { Session } from "@supabase/supabase-js";
 import { AuthStackParamList, RootStackParamList, TabParamList } from "./types";
 
@@ -94,6 +93,30 @@ export default function AppNavigator() {
     return () => listener.subscription?.unsubscribe();
   }, []);
 
+  // ✅ Handle deep links for joining lists
+  useEffect(() => {
+    // Handle initial URL when app opens from a link
+    const handleInitialURL = async () => {
+      const url = await Linking.getInitialURL();
+      if (url) {
+        console.log("📱 App opened with URL:", url);
+        // URL will be handled by React Navigation linking config
+      }
+    };
+
+    handleInitialURL();
+
+    // Handle URLs when app is already open
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      console.log("📱 Deep link received:", url);
+      // URL will be handled by React Navigation linking config
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       {session ? (
@@ -102,6 +125,15 @@ export default function AppNavigator() {
           <RootStack.Screen
             name="RestaurantDetail"
             component={RestaurantDetailScreen}
+          />
+          {/* ✅ Add JoinListScreen for handling share links */}
+          <RootStack.Screen
+            name="JoinList"
+            component={JoinListScreen}
+            options={{
+              presentation: "modal",
+              animation: "slide_from_bottom",
+            }}
           />
         </>
       ) : (

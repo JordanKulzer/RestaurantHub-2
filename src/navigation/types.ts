@@ -15,6 +15,9 @@ export type RootStackParamList = {
   RestaurantDetail: {
     restaurantId: string;
   };
+  JoinList: {
+    shareLinkId: string;
+  };
 };
 
 export type TabParamList = {
