@@ -66,28 +66,33 @@ function mapGoogleResult(r: any, lat: number, lon: number): HomeRestaurant {
 }
 
 // ----------------------------------------------
-// Discovery (optimized single-call version)
+// Discovery (optimized version with radius)
 // ----------------------------------------------
 
 export async function fetchGoogleDiscovery({
   latitude,
   longitude,
   filters,
+  maxDistanceMiles,
 }: {
   latitude: number;
   longitude: number;
   filters: string[];
+  maxDistanceMiles?: number;
 }): Promise<HomeRestaurant[]> {
-  // Build category keyword string
   const categoryString = filters.length
     ? `&keyword=${encodeURIComponent(filters.join(" "))}`
     : "";
 
-  // Single Nearby Search ranked by distance
+  // Use user's distance filter or default to 5 miles
+  const miles =
+    maxDistanceMiles && maxDistanceMiles > 0 ? maxDistanceMiles : 10;
+  const radiusMeters = Math.round(miles * 1609.34); // Convert miles to meters
+
   const url =
     `${GOOGLE_PLACES_BASE}/nearbysearch/json` +
     `?location=${latitude},${longitude}` +
-    `&rankby=distance` +
+    `&radius=${radiusMeters}` +
     `&type=restaurant` +
     `${categoryString}` +
     `&key=${API_KEY}`;
@@ -95,14 +100,11 @@ export async function fetchGoogleDiscovery({
   const data = await fetchJson(url);
   const rawResults = data.results ?? [];
 
-  // Filter out places extremely far away (Google sometimes returns 20+ miles)
+  // Calculate distances for all results
   const filtered = rawResults.filter((r: any) => {
     const plats = r.geometry?.location?.lat;
     const plng = r.geometry?.location?.lng;
-    if (!plats || !plng) return false;
-
-    const miles = metersToMiles(getDistance(latitude, longitude, plats, plng));
-    return miles <= 15; // configurable cap
+    return plats && plng;
   });
 
   // Remove duplicates by place_id
@@ -118,7 +120,7 @@ export async function fetchGoogleDiscovery({
   // Map to HomeRestaurant
   let mapped = unique.map((r) => mapGoogleResult(r, latitude, longitude));
 
-  // Random shuffle
+  // Random shuffle - now with a much larger pool!
   mapped = mapped.sort(() => Math.random() - 0.5);
 
   return mapped;

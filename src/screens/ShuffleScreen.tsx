@@ -356,6 +356,7 @@ export default function ShuffleScreen() {
     } as HomeRestaurant & { image?: string | null };
   };
 
+  // ✅ UPDATED: Pass radius parameter
   async function loadRandomNearbyRestaurants() {
     if (!location) {
       Toast.show({
@@ -376,11 +377,11 @@ export default function ShuffleScreen() {
           latitude: location.lat,
           longitude: location.lon,
           filters: [],
+          maxDistanceMiles: 5, // Default radius for surprise mode
         })) || [];
 
       const limit = 5;
-      const shuffled = results.sort(() => Math.random() - 0.5);
-      const subset = shuffled.slice(0, limit);
+      const subset = results.slice(0, limit); // No need to shuffle, already randomized
 
       setRestaurants(subset);
       if (!subset.length) {
@@ -591,7 +592,7 @@ export default function ShuffleScreen() {
   };
 
   // -------------------------
-  // FILTER MODE SHUFFLE (Google + client filtering)
+  // ✅ UPDATED: FILTER MODE SHUFFLE (uses radius, client-side rating filter only)
   // -------------------------
 
   const handleShuffle = async () => {
@@ -609,32 +610,28 @@ export default function ShuffleScreen() {
     setPhase("eliminate");
 
     try {
+      // Parse distance filter
+      const maxDistance = distance ? Number(distance) : undefined;
+
+      // Fetch with radius parameter
       const results =
         (await fetchGoogleDiscovery({
           latitude: location.lat,
           longitude: location.lon,
           filters: categories,
+          maxDistanceMiles: maxDistance,
         })) || [];
 
+      // ✅ Only filter by rating client-side (distance already handled by API)
       const minRating = rating ? Number(rating) : 0;
-      const maxDistance = distance ? Number(distance) : null;
-
       const filtered = results.filter((r) => {
-        const meetsRating =
-          !minRating || (typeof r.rating === "number" && r.rating >= minRating);
-
-        const distMiles =
-          typeof r.distanceMiles === "number" ? r.distanceMiles : null;
-
-        const meetsDistance =
-          !maxDistance || (distMiles !== null && distMiles <= maxDistance);
-
-        return meetsRating && meetsDistance;
+        return (
+          !minRating || (typeof r.rating === "number" && r.rating >= minRating)
+        );
       });
 
       const limit = Number(numberDisplayed) || 5;
-      const shuffled = filtered.sort(() => Math.random() - 0.5);
-      const subset = shuffled.slice(0, limit);
+      const subset = filtered.slice(0, limit); // Already randomized by API
 
       setRestaurants(subset);
       if (!subset.length) setNoResults(true);

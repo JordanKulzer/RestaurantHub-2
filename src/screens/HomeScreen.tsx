@@ -29,6 +29,8 @@ import {
   HomeSkeleton,
   CreateListModal,
 } from "../components";
+import LocationSelector, { LocationData } from "../components/LocationSelector";
+import MapLocationPicker from "../components/MapLocationPicker";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { fetchGoogleDiscovery } from "../utils/fetchGoogleDiscovery";
@@ -46,7 +48,7 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const FREE_DAILY_SWIPES = 2;
+const FREE_DAILY_SWIPES = 10;
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -58,12 +60,24 @@ export default function HomeScreen() {
 
   const [showChips, setShowChips] = useState(false);
   const [activeModal, setActiveModal] = useState<
-    "category" | "rating" | "location" | "distance" | null
+    "category" | "rating" | "distance" | null
   >(null);
   const [addToListModalVisible, setAddToListModalVisible] = useState(false);
+
+  // Active filters (currently applied)
   const [filters, setFilters] = useState<string[]>([]);
   const [ratingFilter, setRatingFilter] = useState<string>("all");
   const [distanceFilter, setDistanceFilter] = useState<string>("any");
+
+  // Pending filters (staged but not applied yet)
+  const [pendingFilters, setPendingFilters] = useState<string[]>([]);
+  const [pendingRatingFilter, setPendingRatingFilter] = useState<string>("all");
+  const [pendingDistanceFilter, setPendingDistanceFilter] =
+    useState<string>("any");
+  const [pendingLocation, setPendingLocation] = useState<LocationData | null>(
+    null
+  );
+
   const [allSwiped, setAllSwiped] = useState(false);
   const swiperRef = useRef<Swiper<HomeRestaurant>>(null);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
@@ -89,6 +103,13 @@ export default function HomeScreen() {
   // ✅ Preload lists data for QuickActionsMenu
   const [listsCache, setListsCache] = useState<any[]>([]);
   const [listsLoaded, setListsLoaded] = useState(false);
+
+  // Location selector
+  const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(
+    null
+  );
+  const [showLocationSelector, setShowLocationSelector] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   const isFocused = useIsFocused();
 
@@ -148,6 +169,12 @@ export default function HomeScreen() {
       if (saved) setLiked(JSON.parse(saved));
     };
     init();
+
+    // Initialize pending states to match actual filters
+    setPendingFilters([...filters]);
+    setPendingRatingFilter(ratingFilter);
+    setPendingDistanceFilter(distanceFilter);
+    setPendingLocation(selectedLocation);
   }, []);
 
   const animateFadeIn = () => {
@@ -165,6 +192,51 @@ export default function HomeScreen() {
       if (prev.some((x) => x.id === restaurant.id)) return prev;
       return [...prev, restaurant];
     });
+  };
+
+  // Check if there are pending filter changes
+  const hasPendingChanges = () => {
+    const categoryChanged =
+      JSON.stringify(pendingFilters.sort()) !== JSON.stringify(filters.sort());
+    const ratingChanged = pendingRatingFilter !== ratingFilter;
+    const distanceChanged = pendingDistanceFilter !== distanceFilter;
+    const locationChanged =
+      pendingLocation?.placeId !== selectedLocation?.placeId;
+
+    return (
+      categoryChanged || ratingChanged || distanceChanged || locationChanged
+    );
+  };
+
+  const applyFilters = async () => {
+    // Apply all pending filters
+    setFilters(pendingFilters);
+    setRatingFilter(pendingRatingFilter);
+    setDistanceFilter(pendingDistanceFilter);
+
+    // Check if location changed
+    const locationChanged =
+      pendingLocation?.placeId !== selectedLocation?.placeId;
+    setSelectedLocation(pendingLocation);
+
+    // If location didn't change, manually reload
+    // (useEffect will handle reload if location changed)
+    if (!locationChanged) {
+      await loadRestaurants();
+    }
+  };
+
+  const clearAllFilters = async () => {
+    setFilters([]);
+    setPendingFilters([]);
+    setRatingFilter("all");
+    setPendingRatingFilter("all");
+    setDistanceFilter("any");
+    setPendingDistanceFilter("any");
+    setSelectedLocation(null);
+    setPendingLocation(null);
+    setActiveModal(null);
+    await loadRestaurants();
   };
 
   const incrementSwipeCount = async () => {
@@ -192,15 +264,29 @@ export default function HomeScreen() {
       let latitude: number | null = null;
       let longitude: number | null = null;
 
-      try {
-        const loc = await getLocationCached();
-        latitude = loc.latitude;
-        longitude = loc.longitude;
-      } catch (e) {
-        console.warn("⚠️ Could not get location:", e);
+      // Use selected location if available, otherwise get device location
+      if (selectedLocation) {
+        latitude = selectedLocation.latitude;
+        longitude = selectedLocation.longitude;
+        console.log(
+          "🎯 Using selected location:",
+          selectedLocation.name,
+          latitude,
+          longitude
+        );
+      } else {
+        try {
+          const loc = await getLocationCached();
+          latitude = loc.latitude;
+          longitude = loc.longitude;
+          console.log("📍 Using device location:", latitude, longitude);
+        } catch (e) {
+          console.warn("⚠️ Could not get location:", e);
+        }
       }
 
       if (latitude == null || longitude == null) {
+        console.error("❌ No location available");
         return;
       }
 
@@ -208,8 +294,11 @@ export default function HomeScreen() {
         latitude,
         longitude,
         filters,
+        maxDistanceMiles:
+          distanceFilter === "any" ? undefined : parseFloat(distanceFilter),
       });
 
+      // ✅ IMPROVED: Only filter by rating (distance is already handled by API radius)
       const filtered = results.filter((r) => {
         const ratingValue = Number(r.rating);
         const ratingMin = parseFloat(ratingFilter);
@@ -217,25 +306,17 @@ export default function HomeScreen() {
           ratingFilter === "all" ||
           (!isNaN(ratingValue) && ratingValue >= ratingMin);
 
-        const distValue = Number(r.distanceMiles);
-        const distMax = parseFloat(distanceFilter);
-        const meetsDistance =
-          distanceFilter === "any" ||
-          (!isNaN(distValue) && distValue <= distMax);
-
-        return meetsRating && meetsDistance;
+        return meetsRating;
       });
 
-      const randomized = filtered.sort(() => Math.random() - 0.5);
-
       const enriched = await Promise.all(
-        randomized.map(async (r) => {
+        filtered.map(async (r) => {
           const details = await fetchRestaurantInfo(r.source, r.id);
           const safeDetails: Partial<RestaurantCard> = details ?? {};
 
           const fallbackImg =
             r.image ||
-            "https://upload.wikimedia.org/wikipedia/commons/ac/No_image_available.svg";
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png";
           return {
             ...r,
             ...safeDetails,
@@ -293,13 +374,20 @@ export default function HomeScreen() {
     refreshFavorites();
   }, [isFocused, refreshFavorites]);
 
+  // ✅ Reload restaurants when location changes
+  useEffect(() => {
+    if (hasLoadedOnce.current) {
+      loadRestaurants();
+    }
+  }, [selectedLocation]); // Reload when selectedLocation changes
+
   const renderModal = (type: string) => (
     <Portal>
       <Modal
         visible={activeModal === type}
-        onDismiss={async () => {
+        onDismiss={() => {
           setActiveModal(null);
-          await loadRestaurants();
+          // Don't auto-apply - let user click "Apply Filters"
         }}
         contentContainerStyle={[
           styles.modalContainer,
@@ -339,7 +427,7 @@ export default function HomeScreen() {
             {type === "category" && (
               <View style={styles.chipGrid}>
                 {CATEGORY_OPTIONS.map((opt) => {
-                  const selected = filters.includes(opt.value);
+                  const selected = pendingFilters.includes(opt.value);
                   return (
                     <Chip
                       key={opt.value}
@@ -359,7 +447,7 @@ export default function HomeScreen() {
                         fontWeight: "500",
                       }}
                       onPress={() =>
-                        setFilters((prev) =>
+                        setPendingFilters((prev) =>
                           prev.includes(opt.value)
                             ? prev.filter((v) => v !== opt.value)
                             : [...prev, opt.value]
@@ -382,7 +470,7 @@ export default function HomeScreen() {
                   { label: "4★+", value: "4" },
                   { label: "4.5★+", value: "4.5" },
                 ].map((opt) => {
-                  const selected = ratingFilter === opt.value;
+                  const selected = pendingRatingFilter === opt.value;
                   return (
                     <Chip
                       key={opt.value}
@@ -401,7 +489,7 @@ export default function HomeScreen() {
                           : theme.colors.onSurfaceVariant,
                         fontWeight: "500",
                       }}
-                      onPress={() => setRatingFilter(opt.value)}
+                      onPress={() => setPendingRatingFilter(opt.value)}
                     >
                       {opt.label}
                     </Chip>
@@ -417,8 +505,9 @@ export default function HomeScreen() {
                   { label: "≤1 mi", value: "1" },
                   { label: "≤3 mi", value: "3" },
                   { label: "≤5 mi", value: "5" },
+                  { label: "≤10 mi", value: "10" },
                 ].map((opt) => {
-                  const selected = distanceFilter === opt.value;
+                  const selected = pendingDistanceFilter === opt.value;
                   return (
                     <Chip
                       key={opt.value}
@@ -437,7 +526,7 @@ export default function HomeScreen() {
                           : theme.colors.onSurfaceVariant,
                         fontWeight: "500",
                       }}
-                      onPress={() => setDistanceFilter(opt.value)}
+                      onPress={() => setPendingDistanceFilter(opt.value)}
                     >
                       {opt.label}
                     </Chip>
@@ -450,23 +539,22 @@ export default function HomeScreen() {
           <View style={styles.modalFooter}>
             <Button
               mode="contained"
-              onPress={async () => {
+              onPress={() => {
                 setActiveModal(null);
-                await loadRestaurants();
+                // Changes are pending - user needs to tap "Apply Filters"
               }}
               buttonColor={theme.colors.secondary}
               textColor="#fff"
               style={styles.modalBtnApply}
             >
-              Apply
+              Done
             </Button>
             <Button
               mode="outlined"
               onPress={() => {
-                if (type === "category") setFilters([]);
-                else if (type === "rating") setRatingFilter("all");
-                else if (type === "distance") setDistanceFilter("any");
-                else if (type === "location") console.log("Location cleared");
+                if (type === "category") setPendingFilters([]);
+                else if (type === "rating") setPendingRatingFilter("all");
+                else if (type === "distance") setPendingDistanceFilter("any");
               }}
               textColor={theme.colors.onSurface}
               style={styles.modalBtnClear}
@@ -573,6 +661,28 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipScroll}
           >
+            {/* Apply Filters chip - shows when there are pending changes */}
+            {hasPendingChanges() && (
+              <Chip
+                mode="flat"
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    marginRight: 8,
+                  },
+                ]}
+                textStyle={{
+                  color: "#fff",
+                  fontWeight: "700",
+                }}
+                icon="check"
+                onPress={applyFilters}
+              >
+                Apply Filters
+              </Chip>
+            )}
+
             {[
               "Clear Filters",
               "Category",
@@ -584,7 +694,7 @@ export default function HomeScreen() {
                 (label === "Category" && filters.length > 0) ||
                 (label === "Rating" && ratingFilter !== "all") ||
                 (label === "Distance" && distanceFilter !== "any") ||
-                (label === "Location" && activeModal === "location");
+                (label === "Location" && selectedLocation !== null);
 
               const backgroundColor =
                 label === "Clear Filters"
@@ -602,15 +712,31 @@ export default function HomeScreen() {
 
               const handlePress = async () => {
                 if (label === "Clear Filters") {
-                  setFilters([]);
-                  setRatingFilter("all");
-                  setDistanceFilter("any");
-                  setActiveModal(null);
-                  await loadRestaurants();
+                  clearAllFilters();
                   return;
                 }
+
+                // Initialize pending states to current values when opening modal
+                if (label === "Category") {
+                  setPendingFilters([...filters]);
+                } else if (label === "Rating") {
+                  setPendingRatingFilter(ratingFilter);
+                } else if (label === "Distance") {
+                  setPendingDistanceFilter(distanceFilter);
+                } else if (label === "Location") {
+                  setPendingLocation(selectedLocation);
+                  setShowLocationSelector(true);
+                  return;
+                }
+
                 setActiveModal(label.toLowerCase() as any);
               };
+
+              // Show location name if selected
+              const displayLabel =
+                label === "Location" && selectedLocation
+                  ? selectedLocation.name
+                  : label;
 
               return (
                 <Chip
@@ -630,7 +756,7 @@ export default function HomeScreen() {
                   }}
                   onPress={handlePress}
                 >
-                  {label}
+                  {displayLabel}
                 </Chip>
               );
             })}
@@ -677,12 +803,7 @@ export default function HomeScreen() {
 
               <Button
                 mode="contained"
-                onPress={async () => {
-                  setFilters([]);
-                  setRatingFilter("all");
-                  setDistanceFilter("any");
-                  await loadRestaurants();
-                }}
+                onPress={clearAllFilters}
                 buttonColor={theme.colors.primary}
                 style={{
                   marginBottom: 12,
@@ -696,6 +817,7 @@ export default function HomeScreen() {
               <Button
                 mode="outlined"
                 onPress={() => {
+                  setPendingDistanceFilter(distanceFilter);
                   setActiveModal("distance");
                 }}
                 textColor={theme.colors.tertiary}
@@ -791,8 +913,38 @@ export default function HomeScreen() {
 
         {renderModal("category")}
         {renderModal("rating")}
-        {renderModal("location")}
         {renderModal("distance")}
+        <LocationSelector
+          visible={showLocationSelector}
+          onDismiss={() => setShowLocationSelector(false)}
+          onLocationSelected={(location) => {
+            setPendingLocation(location);
+            // Don't apply immediately - wait for "Apply Filters"
+          }}
+          currentLocation={pendingLocation}
+          onOpenMapPicker={() => setShowMapPicker(true)}
+        />
+        <MapLocationPicker
+          visible={showMapPicker}
+          onDismiss={() => setShowMapPicker(false)}
+          onLocationSelected={(location) => {
+            setPendingLocation(location);
+            // Don't apply immediately - wait for "Apply Filters"
+          }}
+          initialLocation={
+            pendingLocation
+              ? {
+                  latitude: pendingLocation.latitude,
+                  longitude: pendingLocation.longitude,
+                }
+              : selectedLocation
+              ? {
+                  latitude: selectedLocation.latitude,
+                  longitude: selectedLocation.longitude,
+                }
+              : undefined
+          }
+        />
         <UpgradeModal
           visible={showUpgradeModal}
           onDismiss={() => setShowUpgradeModal(false)}
