@@ -54,6 +54,28 @@ export default function SearchScreen({ navigation }: any) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const isFocused = useIsFocused();
 
+  const chipStyle = (selected: boolean) => ({
+    borderColor: theme.colors.tertiary,
+    backgroundColor: selected ? theme.colors.tertiary : "transparent",
+    marginRight: 8,
+  });
+
+  const chipTextStyle = (selected: boolean) => ({
+    color: selected ? "#fff" : theme.colors.tertiary,
+    fontWeight: "600" as const,
+  });
+
+  const clearChipStyle = {
+    borderColor: theme.colors.error,
+    backgroundColor: theme.colors.errorContainer,
+    marginRight: 8,
+  };
+
+  const clearChipTextStyle = {
+    color: theme.colors.error,
+    fontWeight: "600" as const,
+  };
+
   const formatAddress = (address: string | null | undefined): string => {
     if (!address) return "";
 
@@ -213,6 +235,17 @@ export default function SearchScreen({ navigation }: any) {
             },
           ]}
         >
+          {/* <Text
+            style={{
+              fontSize: 22,
+              fontWeight: "700",
+              color: theme.colors.tertiary,
+              marginLeft: 16,
+              marginRight: 12,
+            }}
+          >
+            Search
+          </Text> */}
           <View style={styles.searchbarContainer}>
             <Searchbar
               placeholder="Search restaurants"
@@ -259,19 +292,8 @@ export default function SearchScreen({ navigation }: any) {
             <View style={{ flexDirection: "row" }}>
               <Chip
                 mode="outlined"
-                compact
-                style={[
-                  styles.chip,
-                  {
-                    borderColor: theme.colors.error,
-                    backgroundColor: theme.colors.errorContainer,
-                    marginRight: 8,
-                  },
-                ]}
-                textStyle={{
-                  color: theme.colors.error,
-                  fontWeight: "600",
-                }}
+                style={[clearChipStyle]}
+                textStyle={clearChipTextStyle}
                 onPress={() => {
                   setSelectedCategory(null);
                   setQuery("");
@@ -289,20 +311,8 @@ export default function SearchScreen({ navigation }: any) {
                   <Chip
                     key={opt.value}
                     mode="outlined"
-                    style={[
-                      styles.chip,
-                      {
-                        borderColor: theme.colors.tertiary,
-                        backgroundColor: isSelected
-                          ? theme.colors.tertiary
-                          : "transparent",
-                        marginRight: 8,
-                      },
-                    ]}
-                    textStyle={{
-                      color: isSelected ? "#fff" : theme.colors.tertiary,
-                      fontWeight: "600",
-                    }}
+                    style={chipStyle(isSelected)}
+                    textStyle={chipTextStyle(isSelected)}
                     onPress={() => handleCategorySelect(opt.value)}
                   >
                     {opt.label}
@@ -320,20 +330,8 @@ export default function SearchScreen({ navigation }: any) {
                   <Chip
                     key={opt.value}
                     mode="outlined"
-                    style={[
-                      styles.chip,
-                      {
-                        borderColor: theme.colors.tertiary,
-                        backgroundColor: isSelected
-                          ? theme.colors.tertiary
-                          : "transparent",
-                        marginRight: 8,
-                      },
-                    ]}
-                    textStyle={{
-                      color: isSelected ? "#fff" : theme.colors.tertiary,
-                      fontWeight: "600",
-                    }}
+                    style={chipStyle(isSelected)}
+                    textStyle={chipTextStyle(isSelected)}
                     onPress={() => handleCategorySelect(opt.value)}
                   >
                     {opt.label}
@@ -713,12 +711,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 250,
   },
-  chip: {
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 34,
-    justifyContent: "center",
-    paddingHorizontal: 10,
-    marginBottom: 8,
-  },
+  // chip: {
+  //   borderRadius: 18,
+  //   borderWidth: StyleSheet.hairlineWidth,
+  //   height: 34,
+  //   justifyContent: "center",
+  //   paddingHorizontal: 10,
+  //   marginBottom: 8,
+  // },
 });

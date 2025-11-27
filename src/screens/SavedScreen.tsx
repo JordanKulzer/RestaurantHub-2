@@ -207,14 +207,18 @@ export default function SavedScreen() {
         <View style={styles.headerContainer}>
           <View style={styles.headerRow}>
             <Text
-              style={[styles.screenTitle, { color: theme.colors.onBackground }]}
+              style={{
+                fontSize: 22,
+                fontWeight: "700",
+                color: theme.colors.tertiary,
+              }}
             >
               My Stuff
             </Text>
             <IconButton
               icon="account-circle-outline"
               size={28}
-              iconColor={theme.colors.onBackground}
+              iconColor={theme.colors.tertiary}
               onPress={() => setShowAccountModal(true)}
             />
           </View>
@@ -328,8 +332,8 @@ export default function SavedScreen() {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 6,
   },
   headerRow: {

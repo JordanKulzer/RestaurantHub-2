@@ -476,7 +476,7 @@ export default function HomeScreen() {
                       key={opt.value}
                       mode={selected ? "flat" : "outlined"}
                       style={[
-                        styles.chip,
+                        //  styles.chip,
                         {
                           backgroundColor: selected
                             ? theme.colors.primary
@@ -595,7 +595,8 @@ export default function HomeScreen() {
       <View style={{ flex: 1 }}>
         <View
           style={{
-            paddingHorizontal: 16,
+            paddingHorizontal: 20,
+            paddingTop: 16,
             backgroundColor: theme.colors.background,
             zIndex: 10,
           }}
@@ -624,8 +625,9 @@ export default function HomeScreen() {
               <View
                 style={{
                   flexDirection: "row",
+                  alignItems: "center",
                   justifyContent: "space-between",
-                  marginBottom: 4,
+                  marginBottom: 6,
                 }}
               >
                 <Text
@@ -647,11 +649,11 @@ export default function HomeScreen() {
               <ProgressBar
                 progress={swipeCount / FREE_DAILY_SWIPES}
                 color={
-                  swipesRemaining <= 5
+                  swipesRemaining <= 3
                     ? theme.colors.error
                     : theme.colors.primary
                 }
-                style={{ height: 4, borderRadius: 2 }}
+                style={{ height: 6, borderRadius: 3 }}
               />
             </View>
           )}
@@ -966,6 +968,20 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  filterBar: {
+    marginTop: 12,
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#00000015",
+  },
   chipScrollContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -981,25 +997,25 @@ const styles = StyleSheet.create({
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 3,
     alignItems: "center",
   },
   chipGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 4,
     justifyContent: "center",
     marginTop: 8,
   },
   chip: {
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
+    // borderRadius: 18,
+    // borderWidth: StyleSheet.hairlineWidth,
   },
   chipScroll: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
-    paddingRight: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
   },
   modalContainer: {
     marginTop: "auto",
@@ -1077,6 +1093,10 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: 25,
     paddingVertical: 4,
+  },
+  upgradePill: {
+    borderRadius: 999,
+    height: 34,
   },
   resetNote: {
     fontSize: 12,

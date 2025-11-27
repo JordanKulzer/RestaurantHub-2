@@ -9,18 +9,19 @@ import {
   Platform,
   Linking,
   Animated,
+  ScrollView,
 } from "react-native";
 import {
   Button,
   Card,
   Text,
-  Surface,
   useTheme,
   IconButton,
   MD3Theme,
   ProgressBar,
   Modal,
   Portal,
+  Chip,
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -30,6 +31,8 @@ import {
   UpgradeModal,
   HomeSkeleton,
 } from "../components";
+import LocationSelector, { LocationData } from "../components/LocationSelector";
+import MapLocationPicker from "../components/MapLocationPicker";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import Toast from "react-native-toast-message";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -44,7 +47,7 @@ import { getFavorites } from "../utils/favoritesApis";
 import { RestaurantPointer } from "../utils/restaurantPointers";
 import { getLocationCached } from "../utils/locationHelper";
 
-type Phase = "choose-source" | "filters" | "eliminate";
+type Phase = "choose-source" | "eliminate";
 type ShuffleSource =
   | "favorites"
   | "liked"
@@ -61,6 +64,17 @@ const FREE_DAILY_SHUFFLES = 10;
 export default function ShuffleScreen() {
   const theme = useTheme();
 
+  const filterChipStyle = (selected: boolean) => ({
+    backgroundColor: selected ? theme.colors.tertiary : "transparent",
+    borderColor: theme.colors.tertiary,
+  });
+
+  const filterChipTextStyle = (selected: boolean) => ({
+    color: selected ? "#fff" : theme.colors.tertiary,
+    fontWeight: "600" as const,
+    fontSize: 13,
+  });
+
   // LOCATION
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(
     null
@@ -71,11 +85,23 @@ export default function ShuffleScreen() {
   const [shuffleSource, setShuffleSource] = useState<ShuffleSource>(null);
   const [shuffleLabel, setShuffleLabel] = useState("");
 
-  // FILTERS
+  // FILTERS - Active filters
   const [categories, setCategories] = useState<string[]>([]);
   const [rating, setRating] = useState("");
   const [distance, setDistance] = useState("");
   const [numberDisplayed, setNumberDisplayed] = useState("5");
+  const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(
+    null
+  );
+
+  // FILTERS - Pending filters (staged but not applied)
+  const [pendingCategories, setPendingCategories] = useState<string[]>([]);
+  const [pendingRating, setPendingRating] = useState("");
+  const [pendingDistance, setPendingDistance] = useState("");
+  const [pendingNumber, setPendingNumber] = useState("5");
+  const [pendingLocation, setPendingLocation] = useState<LocationData | null>(
+    null
+  );
 
   // DATA FOR CURRENT ROUND
   const [restaurants, setRestaurants] = useState<HomeRestaurant[]>([]);
@@ -87,6 +113,16 @@ export default function ShuffleScreen() {
   // LISTS (for expandable "Lists" card)
   const [preloadedLists, setPreloadedLists] = useState<any[]>([]);
   const [listsExpanded, setListsExpanded] = useState(false);
+
+  // FILTERS (for expandable "Filters" card)
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [showLocationSelector, setShowLocationSelector] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+
+  // EXPANDABLE STATES for other sources
+  const [favoritesExpanded, setFavoritesExpanded] = useState(false);
+  const [likedExpanded, setLikedExpanded] = useState(false);
+  const [surpriseExpanded, setSurpriseExpanded] = useState(false);
 
   // MODAL
   const [selectedRestaurant, setSelectedRestaurant] =
@@ -101,7 +137,7 @@ export default function ShuffleScreen() {
   const [shuffleCount, setShuffleCount] = useState(0);
   const [shuffleLastResetDate, setShuffleLastResetDate] = useState<string>("");
   const [showShuffleUpgradeModal, setShowShuffleUpgradeModal] = useState(false);
-  const [isPremium, setIsPremium] = useState(false); // mirror HomeScreen
+  const [isPremium, setIsPremium] = useState(false);
 
   // FAVORITES
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
@@ -115,25 +151,6 @@ export default function ShuffleScreen() {
 
   const accent = theme.colors.tertiary;
   const surface = theme.colors.surface;
-
-  const ratingOptions = [
-    { label: "Any", value: "" },
-    { label: "3+", value: "3" },
-    { label: "4+", value: "4" },
-    { label: "4.5+", value: "4.5" },
-  ];
-  const distanceOptions = [
-    { label: "1 mi", value: "1" },
-    { label: "3 mi", value: "3" },
-    { label: "5 mi", value: "5" },
-    { label: "10 mi", value: "10" },
-  ];
-  const numberOptions = [
-    { label: "3", value: "3" },
-    { label: "5", value: "5" },
-    { label: "7", value: "7" },
-    { label: "10", value: "10" },
-  ];
 
   const formatAddress = (address: string | null | undefined): string => {
     if (!address) return "";
@@ -164,6 +181,47 @@ export default function ShuffleScreen() {
 
   const resetAnimatedValues = () => {
     animatedValues.clear();
+  };
+
+  // Check if there are pending filter changes
+  const hasPendingChanges = () => {
+    const categoryChanged =
+      JSON.stringify(pendingCategories.sort()) !==
+      JSON.stringify(categories.sort());
+    const ratingChanged = pendingRating !== rating;
+    const distanceChanged = pendingDistance !== distance;
+    const numberChanged = pendingNumber !== numberDisplayed;
+    const locationChanged =
+      pendingLocation?.placeId !== selectedLocation?.placeId;
+
+    return (
+      categoryChanged ||
+      ratingChanged ||
+      distanceChanged ||
+      numberChanged ||
+      locationChanged
+    );
+  };
+
+  const applyFilters = () => {
+    setCategories(pendingCategories);
+    setRating(pendingRating);
+    setDistance(pendingDistance);
+    setNumberDisplayed(pendingNumber);
+    setSelectedLocation(pendingLocation);
+  };
+
+  const clearAllFilters = () => {
+    setCategories([]);
+    setPendingCategories([]);
+    setRating("");
+    setPendingRating("");
+    setDistance("");
+    setPendingDistance("");
+    setNumberDisplayed("5");
+    setPendingNumber("5");
+    setSelectedLocation(null);
+    setPendingLocation(null);
   };
 
   useEffect(() => {
@@ -356,7 +414,6 @@ export default function ShuffleScreen() {
     } as HomeRestaurant & { image?: string | null };
   };
 
-  // ✅ UPDATED: Pass radius parameter
   async function loadRandomNearbyRestaurants() {
     if (!location) {
       Toast.show({
@@ -377,11 +434,11 @@ export default function ShuffleScreen() {
           latitude: location.lat,
           longitude: location.lon,
           filters: [],
-          maxDistanceMiles: 5, // Default radius for surprise mode
+          maxDistanceMiles: 10,
         })) || [];
 
-      const limit = 5;
-      const subset = results.slice(0, limit); // No need to shuffle, already randomized
+      const limit = 10;
+      const subset = results.slice(0, limit);
 
       setRestaurants(subset);
       if (!subset.length) {
@@ -549,7 +606,7 @@ export default function ShuffleScreen() {
 
     if (key === "filters") {
       setShuffleLabel("Choose Your Winner");
-      setPhase("filters");
+      setPhase("choose-source");
       return;
     }
 
@@ -562,6 +619,58 @@ export default function ShuffleScreen() {
 
   const toggleListsExpand = () => {
     setListsExpanded((prev) => !prev);
+    if (!listsExpanded) {
+      setFiltersExpanded(false);
+      setFavoritesExpanded(false);
+      setLikedExpanded(false);
+      setSurpriseExpanded(false);
+    }
+  };
+
+  const toggleFiltersExpand = () => {
+    setFiltersExpanded((prev) => !prev);
+    if (!filtersExpanded) {
+      setListsExpanded(false);
+      setFavoritesExpanded(false);
+      setLikedExpanded(false);
+      setSurpriseExpanded(false);
+      // Initialize pending states to current values
+      setPendingCategories([...categories]);
+      setPendingRating(rating);
+      setPendingDistance(distance);
+      setPendingNumber(numberDisplayed);
+      setPendingLocation(selectedLocation);
+    }
+  };
+
+  const toggleFavoritesExpand = () => {
+    setFavoritesExpanded((prev) => !prev);
+    if (!favoritesExpanded) {
+      setListsExpanded(false);
+      setFiltersExpanded(false);
+      setLikedExpanded(false);
+      setSurpriseExpanded(false);
+    }
+  };
+
+  const toggleLikedExpand = () => {
+    setLikedExpanded((prev) => !prev);
+    if (!likedExpanded) {
+      setListsExpanded(false);
+      setFiltersExpanded(false);
+      setFavoritesExpanded(false);
+      setSurpriseExpanded(false);
+    }
+  };
+
+  const toggleSurpriseExpand = () => {
+    setSurpriseExpanded((prev) => !prev);
+    if (!surpriseExpanded) {
+      setListsExpanded(false);
+      setFiltersExpanded(false);
+      setFavoritesExpanded(false);
+      setLikedExpanded(false);
+    }
   };
 
   const handleListsSelected = async (
@@ -591,12 +700,20 @@ export default function ShuffleScreen() {
     }
   };
 
-  // -------------------------
-  // ✅ UPDATED: FILTER MODE SHUFFLE (uses radius, client-side rating filter only)
-  // -------------------------
-
   const handleShuffle = async () => {
-    if (!location) {
+    // Use selected location or device location
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+
+    if (selectedLocation) {
+      latitude = selectedLocation.latitude;
+      longitude = selectedLocation.longitude;
+    } else if (location) {
+      latitude = location.lat;
+      longitude = location.lon;
+    }
+
+    if (!latitude || !longitude) {
       Toast.show({
         type: "error",
         text1: "Location not ready",
@@ -610,19 +727,16 @@ export default function ShuffleScreen() {
     setPhase("eliminate");
 
     try {
-      // Parse distance filter
       const maxDistance = distance ? Number(distance) : undefined;
 
-      // Fetch with radius parameter
       const results =
         (await fetchGoogleDiscovery({
-          latitude: location.lat,
-          longitude: location.lon,
+          latitude,
+          longitude,
           filters: categories,
           maxDistanceMiles: maxDistance,
         })) || [];
 
-      // ✅ Only filter by rating client-side (distance already handled by API)
       const minRating = rating ? Number(rating) : 0;
       const filtered = results.filter((r) => {
         return (
@@ -630,8 +744,8 @@ export default function ShuffleScreen() {
         );
       });
 
-      const limit = Number(numberDisplayed) || 5;
-      const subset = filtered.slice(0, limit); // Already randomized by API
+      const limit = Number(numberDisplayed) || 10;
+      const subset = filtered.slice(0, limit);
 
       setRestaurants(subset);
       if (!subset.length) setNoResults(true);
@@ -650,9 +764,6 @@ export default function ShuffleScreen() {
     setLoading(false);
   };
 
-  // -------------------------
-  // ELIMINATION MODE
-  // -------------------------
   const handleEliminate = (id: string) => {
     const animValue = getAnimatedValue(id);
 
@@ -688,13 +799,13 @@ export default function ShuffleScreen() {
     setShuffleSource(null);
     setShuffleLabel("");
     setListsExpanded(false);
+    setFiltersExpanded(false);
+    setFavoritesExpanded(false);
+    setLikedExpanded(false);
+    setSurpriseExpanded(false);
     setWinner(null);
     resetAnimatedValues();
   };
-
-  // -------------------------
-  // VIEW DETAILS (Google)
-  // -------------------------
 
   const handleViewDetails = async (item: HomeRestaurant) => {
     try {
@@ -712,9 +823,6 @@ export default function ShuffleScreen() {
     }
   };
 
-  // -------------------------
-  // UI HELPERS
-  // -------------------------
   const renderHeaderWithBack = () => (
     <View style={styles.headerRow}>
       <IconButton
@@ -766,87 +874,87 @@ export default function ShuffleScreen() {
         colors={[theme.colors.background, surface]}
         style={StyleSheet.absoluteFill}
       />
-      {/* CHOOSE SOURCE */}
-      {phase === "choose-source" && shuffleSource === null && (
-        <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
-          <Text
-            style={{
-              fontSize: 22,
-              fontWeight: "700",
-              marginBottom: 6,
-              color: theme.colors.tertiary,
-            }}
-          >
-            Shuffler
-          </Text>
-          {showShuffleCounter && (
-            <View style={styles.shuffleCounterContainer}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  marginBottom: 4,
-                }}
-              >
-                <Text
-                  style={[
-                    styles.shuffleCounterText,
-                    { color: theme.colors.onSurface },
-                  ]}
-                >
-                  {shufflesRemaining} shuffles remaining today
-                </Text>
 
-                <TouchableOpacity
-                  onPress={() => setShowShuffleUpgradeModal(true)}
+      {phase === "choose-source" && shuffleSource === null && (
+        <ScrollView style={{ flex: 1 }}>
+          <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "700",
+                marginBottom: 6,
+                color: theme.colors.tertiary,
+              }}
+            >
+              Shuffler
+            </Text>
+            {showShuffleCounter && (
+              <View style={styles.shuffleCounterContainer}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginBottom: 4,
+                  }}
                 >
                   <Text
-                    style={{ color: theme.colors.primary, fontWeight: "600" }}
+                    style={[
+                      styles.shuffleCounterText,
+                      { color: theme.colors.onSurface },
+                    ]}
                   >
-                    Upgrade ✨
+                    {shufflesRemaining} shuffles remaining today
                   </Text>
-                </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => setShowShuffleUpgradeModal(true)}
+                  >
+                    <Text
+                      style={{ color: theme.colors.primary, fontWeight: "600" }}
+                    >
+                      Upgrade ✨
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ProgressBar
+                  progress={shuffleCount / FREE_DAILY_SHUFFLES}
+                  color={
+                    shufflesRemaining <= 5
+                      ? theme.colors.error
+                      : theme.colors.primary
+                  }
+                  style={{ height: 4, borderRadius: 2 }}
+                />
               </View>
+            )}
 
-              <ProgressBar
-                progress={shuffleCount / FREE_DAILY_SHUFFLES}
-                color={
-                  shufflesRemaining <= 5
-                    ? theme.colors.error
-                    : theme.colors.primary
-                }
-                style={{ height: 4, borderRadius: 2 }}
-              />
-            </View>
-          )}
-
-          <Text
-            style={{
-              fontSize: 14,
-              color: theme.colors.onSurface + "99",
-              marginBottom: 16,
-            }}
-          >
-            Pick where to shuffle from, then eliminate one by one to find your
-            winner!
-          </Text>
-
-          {/* FAVORITES */}
-          <Surface
-            mode="elevated"
-            style={[
-              styles.sourceCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.tertiary,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              onPress={() => handleSelectSource("favorites")}
-              style={{ paddingVertical: 18, paddingHorizontal: 16 }}
+            <Text
+              style={{
+                fontSize: 14,
+                color: theme.colors.onSurface + "99",
+                marginBottom: 16,
+              }}
             >
-              <View
+              Pick where to shuffle from, then eliminate one by one to find your
+              winner!
+            </Text>
+
+            {/* FAVORITES */}
+            <Card
+              mode="elevated"
+              style={[
+                styles.sourceCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.tertiary,
+                },
+              ]}
+            >
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={toggleFavoritesExpand}
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
@@ -854,26 +962,57 @@ export default function ShuffleScreen() {
                 }}
               >
                 <Text style={dyn.sourceText(theme)}>Favorites</Text>
-                <Text style={dyn.expandArrow(theme)}>▶</Text>
-              </View>
-            </TouchableOpacity>
-          </Surface>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    color: theme.colors.onSurfaceVariant,
+                  }}
+                >
+                  {favoritesExpanded ? "▼" : "▶"}
+                </Text>
+              </TouchableOpacity>
 
-          <Surface
-            mode="elevated"
-            style={[
-              styles.sourceCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.tertiary,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              onPress={() => handleSelectSource("liked")}
-              style={{ paddingVertical: 18, paddingHorizontal: 16 }}
+              {favoritesExpanded && (
+                <View style={{ marginTop: 16 }}>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: theme.colors.onSurface + "99",
+                      marginBottom: 16,
+                      lineHeight: 20,
+                    }}
+                  >
+                    Shuffle from all your favorited restaurants. We'll load your
+                    complete favorites collection for you to eliminate down to
+                    your winner.
+                  </Text>
+                  <Button
+                    mode="contained"
+                    onPress={() => handleSelectSource("favorites")}
+                    style={{ borderRadius: 25 }}
+                    loading={loading && shuffleSource === "favorites"}
+                    disabled={loading}
+                  >
+                    Shuffle Now
+                  </Button>
+                </View>
+              )}
+            </Card>
+
+            {/* LIKED */}
+            <Card
+              mode="elevated"
+              style={[
+                styles.sourceCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.tertiary,
+                },
+              ]}
             >
-              <View
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={toggleLikedExpand}
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
@@ -881,168 +1020,223 @@ export default function ShuffleScreen() {
                 }}
               >
                 <Text style={dyn.sourceText(theme)}>Liked</Text>
-                <Text style={dyn.expandArrow(theme)}>▶</Text>
-              </View>
-            </TouchableOpacity>
-          </Surface>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    color: theme.colors.onSurfaceVariant,
+                  }}
+                >
+                  {likedExpanded ? "▼" : "▶"}
+                </Text>
+              </TouchableOpacity>
 
-          <Surface
-            mode="elevated"
-            style={[
-              styles.sourceCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.tertiary,
-                paddingVertical: 20,
-                paddingHorizontal: 16,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              onPress={toggleListsExpand}
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
+              {likedExpanded && (
+                <View style={{ marginTop: 16 }}>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: theme.colors.onSurface + "99",
+                      marginBottom: 16,
+                      lineHeight: 20,
+                    }}
+                  >
+                    Shuffle from all restaurants you've liked while swiping.
+                    Perfect for revisiting places you were interested in before.
+                  </Text>
+                  <Button
+                    mode="contained"
+                    onPress={() => handleSelectSource("liked")}
+                    style={{ borderRadius: 25 }}
+                    loading={loading && shuffleSource === "liked"}
+                    disabled={loading}
+                  >
+                    Shuffle Now
+                  </Button>
+                </View>
+              )}
+            </Card>
+
+            {/* LISTS */}
+            <Card
+              mode="elevated"
+              style={[
+                styles.sourceCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.tertiary,
+                },
+              ]}
             >
-              <Text style={dyn.sourceText(theme)}>Lists</Text>
-              <Text
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={toggleListsExpand}
                 style={{
-                  fontSize: 18,
-                  color: theme.colors.onSurfaceVariant,
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
                 }}
               >
-                {listsExpanded ? "▼" : "▶"}
-              </Text>
-            </TouchableOpacity>
+                <Text style={dyn.sourceText(theme)}>Lists</Text>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    color: theme.colors.onSurfaceVariant,
+                  }}
+                >
+                  {listsExpanded ? "▼" : "▶"}
+                </Text>
+              </TouchableOpacity>
 
-            {listsExpanded && (
-              <View style={{ marginTop: 10, maxHeight: 300 }}>
-                <FlatList
-                  data={preloadedLists}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      onPress={() =>
-                        setPreloadedLists((prev) =>
-                          prev.map((x) =>
-                            x.id === item.id
-                              ? { ...x, selected: !x.selected }
-                              : x
+              {listsExpanded && (
+                <View style={{ marginTop: 10 }}>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: theme.colors.onSurface + "99",
+                      marginBottom: 12,
+                      lineHeight: 20,
+                    }}
+                  >
+                    Select one or more of your custom lists to shuffle from. All
+                    restaurants from the selected lists will be combined for
+                    elimination.
+                  </Text>
+                  <ScrollView
+                    style={{ maxHeight: 300 }}
+                    nestedScrollEnabled={true}
+                    showsVerticalScrollIndicator={true}
+                  >
+                    {preloadedLists.map((item) => (
+                      <TouchableOpacity
+                        activeOpacity={0.9}
+                        key={item.id}
+                        onPress={() =>
+                          setPreloadedLists((prev) =>
+                            prev.map((x) =>
+                              x.id === item.id
+                                ? { ...x, selected: !x.selected }
+                                : x
+                            )
                           )
-                        )
-                      }
+                        }
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          paddingVertical: 14,
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                          borderColor: theme.colors.outlineVariant,
+                        }}
+                      >
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <IconButton
+                            icon={
+                              item.selected
+                                ? "check-circle"
+                                : "checkbox-blank-circle-outline"
+                            }
+                            size={20}
+                            iconColor={
+                              item.selected
+                                ? theme.colors.primary
+                                : theme.colors.onSurfaceVariant
+                            }
+                          />
+                          <Text
+                            style={{
+                              fontSize: 15,
+                              color: theme.colors.onSurface,
+                              fontWeight: item.selected ? "600" : "400",
+                            }}
+                          >
+                            {item.title}
+                          </Text>
+                        </View>
+
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            color: theme.colors.onSurfaceVariant,
+                          }}
+                        >
+                          {item.placesCount ?? 0} items
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  {preloadedLists.length > 0 && (
+                    <View
                       style={{
                         flexDirection: "row",
                         justifyContent: "space-between",
-                        alignItems: "center",
-                        paddingVertical: 20,
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderColor: theme.colors.outlineVariant,
+                        marginTop: 12,
                       }}
                     >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
+                      <Button
+                        mode="contained"
+                        style={{ flex: 1, borderRadius: 25, marginRight: 14 }}
+                        onPress={() => {
+                          const chosen = preloadedLists.filter(
+                            (x) => x.selected
+                          );
+                          if (!chosen.length) {
+                            Toast.show({
+                              type: "info",
+                              text1: "Select at least 1 list",
+                            });
+                            return;
+                          }
+                          const ids = chosen.map((c: any) => c.id);
+                          const names = chosen.map((c: any) => c.title);
+                          handleListsSelected(ids, names);
                         }}
                       >
-                        <IconButton
-                          icon={
-                            item.selected
-                              ? "check-circle"
-                              : "checkbox-blank-circle-outline"
-                          }
-                          size={20}
-                          iconColor={
-                            item.selected
-                              ? theme.colors.primary
-                              : theme.colors.onSurfaceVariant
-                          }
-                        />
-                        <Text
-                          style={{
-                            fontSize: 15,
-                            color: theme.colors.onSurface,
-                            fontWeight: item.selected ? "600" : "400",
-                          }}
-                        >
-                          {item.title}
-                        </Text>
-                      </View>
+                        Shuffle Now
+                      </Button>
 
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          color: theme.colors.onSurfaceVariant,
-                        }}
-                      >
-                        {item.placesCount ?? 0} items
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                />
-
-                {preloadedLists.length > 0 && (
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      marginTop: 12,
-                    }}
-                  >
-                    <Button
-                      mode="contained"
-                      onPress={() => {
-                        const chosen = preloadedLists.filter((x) => x.selected);
-                        if (!chosen.length) {
-                          Toast.show({
-                            type: "info",
-                            text1: "Select at least 1 list",
-                          });
-                          return;
+                      <Button
+                        mode="outlined"
+                        onPress={() =>
+                          setPreloadedLists((prev) =>
+                            prev.map((x) => ({ ...x, selected: false }))
+                          )
                         }
-                        const ids = chosen.map((c: any) => c.id);
-                        const names = chosen.map((c: any) => c.title);
-                        handleListsSelected(ids, names);
-                      }}
-                    >
-                      Continue
-                    </Button>
+                        style={{
+                          flex: 1,
+                          borderRadius: 25,
+                          borderColor: theme.colors.error,
+                        }}
+                        textColor={theme.colors.error}
+                      >
+                        Clear
+                      </Button>
+                    </View>
+                  )}
+                </View>
+              )}
+            </Card>
 
-                    <Button
-                      mode="outlined"
-                      onPress={() =>
-                        setPreloadedLists((prev) =>
-                          prev.map((x) => ({ ...x, selected: false }))
-                        )
-                      }
-                    >
-                      Clear
-                    </Button>
-                  </View>
-                )}
-              </View>
-            )}
-          </Surface>
-
-          <Surface
-            mode="elevated"
-            style={[
-              styles.sourceCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.tertiary,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              onPress={() => handleSelectSource("filters")}
-              style={{ paddingVertical: 18, paddingHorizontal: 16 }}
+            {/* FILTERS - EXPANDABLE */}
+            <Card
+              mode="elevated"
+              style={[
+                styles.sourceCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.tertiary,
+                },
+              ]}
             >
-              <View
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={toggleFiltersExpand}
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
@@ -1050,26 +1244,349 @@ export default function ShuffleScreen() {
                 }}
               >
                 <Text style={dyn.sourceText(theme)}>Filters</Text>
-                <Text style={dyn.expandArrow(theme)}>▶</Text>
-              </View>
-            </TouchableOpacity>
-          </Surface>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    color: theme.colors.onSurfaceVariant,
+                  }}
+                >
+                  {filtersExpanded ? "▼" : "▶"}
+                </Text>
+              </TouchableOpacity>
 
-          <Surface
-            mode="elevated"
-            style={[
-              styles.sourceCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.tertiary,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              onPress={() => handleSelectSource("surprise")}
-              style={{ paddingVertical: 18, paddingHorizontal: 16 }}
+              {filtersExpanded && (
+                <View style={{ marginTop: 16 }}>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: theme.colors.onSurface + "99",
+                      marginBottom: 16,
+                      lineHeight: 20,
+                    }}
+                  >
+                    Customize your shuffle with specific categories, ratings,
+                    location, distance, and number of restaurants. Fine-tune
+                    your search to find exactly what you're craving.
+                  </Text>
+                  {/* Categories */}
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "600",
+                        color: theme.colors.onSurface,
+                        marginBottom: 8,
+                      }}
+                    >
+                      Categories
+                    </Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ paddingRight: 16 }}
+                    >
+                      <View style={{ gap: 6 }}>
+                        {/* First Row */}
+                        <View style={{ flexDirection: "row", gap: 6 }}>
+                          {CATEGORY_OPTIONS.slice(
+                            0,
+                            Math.ceil(CATEGORY_OPTIONS.length / 2)
+                          ).map((opt) => {
+                            const selected = pendingCategories.includes(
+                              opt.value
+                            );
+                            return (
+                              <Chip
+                                key={opt.value}
+                                mode={selected ? "flat" : "outlined"}
+                                style={filterChipStyle(selected)}
+                                textStyle={filterChipTextStyle(selected)}
+                                onPress={() =>
+                                  setPendingCategories((prev) =>
+                                    prev.includes(opt.value)
+                                      ? prev.filter((v) => v !== opt.value)
+                                      : [...prev, opt.value]
+                                  )
+                                }
+                              >
+                                {opt.label}
+                              </Chip>
+                            );
+                          })}
+                        </View>
+
+                        {/* Second Row */}
+                        <View style={{ flexDirection: "row", gap: 6 }}>
+                          {CATEGORY_OPTIONS.slice(
+                            Math.ceil(CATEGORY_OPTIONS.length / 2)
+                          ).map((opt) => {
+                            const selected = pendingCategories.includes(
+                              opt.value
+                            );
+                            return (
+                              <Chip
+                                key={opt.value}
+                                mode={selected ? "flat" : "outlined"}
+                                style={filterChipStyle(selected)}
+                                textStyle={filterChipTextStyle(selected)}
+                                onPress={() =>
+                                  setPendingCategories((prev) =>
+                                    prev.includes(opt.value)
+                                      ? prev.filter((v) => v !== opt.value)
+                                      : [...prev, opt.value]
+                                  )
+                                }
+                              >
+                                {opt.label}
+                              </Chip>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    </ScrollView>
+                  </View>
+
+                  {/* Rating */}
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "600",
+                        color: theme.colors.onSurface,
+                        marginBottom: 8,
+                      }}
+                    >
+                      Rating
+                    </Text>
+                    <View
+                      style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}
+                    >
+                      {[
+                        { label: "Any", value: "" },
+                        { label: "3★+", value: "3" },
+                        { label: "3.5★+", value: "3.5" },
+                        { label: "4★+", value: "4" },
+                        { label: "4.5★+", value: "4.5" },
+                      ].map((opt) => {
+                        const selected = pendingRating === opt.value;
+                        return (
+                          <Chip
+                            key={opt.value}
+                            mode={selected ? "flat" : "outlined"}
+                            style={filterChipStyle(selected)}
+                            textStyle={filterChipTextStyle(selected)}
+                            onPress={() => setPendingRating(opt.value)}
+                          >
+                            {opt.label}
+                          </Chip>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {/* Location */}
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "600",
+                        color: theme.colors.onSurface,
+                        marginBottom: 8,
+                      }}
+                    >
+                      Location
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setShowLocationSelector(true)}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: pendingLocation
+                          ? theme.colors.primary
+                          : theme.colors.outlineVariant,
+                        backgroundColor: pendingLocation
+                          ? theme.colors.primaryContainer
+                          : "transparent",
+                      }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          flex: 1,
+                        }}
+                      >
+                        <IconButton
+                          icon={
+                            pendingLocation
+                              ? "map-marker"
+                              : "map-marker-outline"
+                          }
+                          size={20}
+                          iconColor={
+                            pendingLocation
+                              ? theme.colors.primary
+                              : theme.colors.onSurfaceVariant
+                          }
+                          style={{ margin: 0 }}
+                        />
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            color: pendingLocation
+                              ? theme.colors.primary
+                              : theme.colors.onSurface,
+                            fontWeight: pendingLocation ? "600" : "400",
+                            marginLeft: 4,
+                            flex: 1,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {pendingLocation
+                            ? pendingLocation.name
+                            : "Current Location"}
+                        </Text>
+                      </View>
+                      <IconButton
+                        icon="chevron-right"
+                        size={20}
+                        iconColor={theme.colors.onSurfaceVariant}
+                        style={{ margin: 0 }}
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Distance */}
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "600",
+                        color: theme.colors.onSurface,
+                        marginBottom: 8,
+                      }}
+                    >
+                      Distance
+                    </Text>
+                    <View
+                      style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}
+                    >
+                      {[
+                        { label: "Any", value: "" },
+                        { label: "≤1 mi", value: "1" },
+                        { label: "≤3 mi", value: "3" },
+                        { label: "≤5 mi", value: "5" },
+                        { label: "≤10 mi", value: "10" },
+                      ].map((opt) => {
+                        const selected = pendingDistance === opt.value;
+                        return (
+                          <Chip
+                            key={opt.value}
+                            mode={selected ? "flat" : "outlined"}
+                            style={filterChipStyle(selected)}
+                            textStyle={filterChipTextStyle(selected)}
+                            onPress={() => setPendingDistance(opt.value)}
+                          >
+                            {opt.label}
+                          </Chip>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {/* Number of Restaurants */}
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "600",
+                        color: theme.colors.onSurface,
+                        marginBottom: 8,
+                      }}
+                    >
+                      Number of Restaurants
+                    </Text>
+                    <View
+                      style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}
+                    >
+                      {[
+                        { label: "3", value: "3" },
+                        { label: "5", value: "5" },
+                        { label: "7", value: "7" },
+                        { label: "10", value: "10" },
+                      ].map((opt) => {
+                        const selected = pendingNumber === opt.value;
+                        return (
+                          <Chip
+                            key={opt.value}
+                            mode={selected ? "flat" : "outlined"}
+                            style={filterChipStyle(selected)}
+                            textStyle={filterChipTextStyle(selected)}
+                            onPress={() => setPendingNumber(opt.value)}
+                          >
+                            {opt.label}
+                          </Chip>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {/* Action Buttons */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      gap: 8,
+                      marginTop: 8,
+                      marginRight: 14,
+                    }}
+                  >
+                    <Button
+                      mode="contained"
+                      onPress={async () => {
+                        applyFilters();
+                        await handleShuffle();
+                      }}
+                      style={{ flex: 1, borderRadius: 25 }}
+                    >
+                      {loading ? "Shuffling..." : "Shuffle Now"}
+                    </Button>
+
+                    <Button
+                      mode="outlined"
+                      onPress={clearAllFilters}
+                      style={{
+                        flex: 1,
+                        borderRadius: 25,
+                        borderColor: theme.colors.error,
+                      }}
+                      textColor={theme.colors.error}
+                    >
+                      Clear
+                    </Button>
+                  </View>
+                </View>
+              )}
+            </Card>
+
+            {/* SURPRISE ME */}
+            <Card
+              mode="elevated"
+              style={[
+                styles.sourceCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.tertiary,
+                },
+              ]}
             >
-              <View
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={toggleSurpriseExpand}
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
@@ -1077,71 +1594,46 @@ export default function ShuffleScreen() {
                 }}
               >
                 <Text style={dyn.sourceText(theme)}>Surprise Me</Text>
-                <Text style={dyn.expandArrow(theme)}>▶</Text>
-              </View>
-            </TouchableOpacity>
-          </Surface>
-        </View>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    color: theme.colors.onSurfaceVariant,
+                  }}
+                >
+                  {surpriseExpanded ? "▼" : "▶"}
+                </Text>
+              </TouchableOpacity>
+
+              {surpriseExpanded && (
+                <View style={{ marginTop: 16 }}>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: theme.colors.onSurface + "99",
+                      marginBottom: 16,
+                      lineHeight: 20,
+                    }}
+                  >
+                    Feeling adventurous? We'll pick 10 random restaurants near
+                    you within a 10-mile radius. Great for discovering new
+                    places!
+                  </Text>
+                  <Button
+                    mode="contained"
+                    onPress={() => handleSelectSource("surprise")}
+                    style={{ borderRadius: 25 }}
+                    loading={loading && shuffleSource === "surprise"}
+                    disabled={loading}
+                  >
+                    Shuffle Now
+                  </Button>
+                </View>
+              )}
+            </Card>
+          </View>
+        </ScrollView>
       )}
-      {/* FILTER MODE */}
-      {phase === "filters" && (
-        <View style={styles.container}>
-          {renderHeaderWithBack()}
 
-          <Surface
-            style={[
-              styles.filterCard,
-              { backgroundColor: surface, borderColor: accent },
-            ]}
-          >
-            <DropdownModal
-              label="Categories"
-              options={CATEGORY_OPTIONS}
-              value={categories}
-              onChange={setCategories}
-              multiSelect
-            />
-            <DropdownModal
-              label="Rating"
-              options={ratingOptions}
-              value={rating}
-              onChange={setRating}
-            />
-            <DropdownModal
-              label="Distance"
-              options={distanceOptions}
-              value={distance}
-              onChange={setDistance}
-            />
-            <DropdownModal
-              label="Number of Restaurants"
-              options={numberOptions}
-              value={numberDisplayed}
-              onChange={setNumberDisplayed}
-            />
-          </Surface>
-
-          <Button
-            mode="contained"
-            onPress={async () => {
-              await handleShuffle();
-
-              if (!isPremium && shufflesRemaining === 0) {
-                setShowShuffleUpgradeModal(true);
-                return;
-              }
-
-              incrementShuffleCount();
-            }}
-          >
-            {loading ? "Shuffling..." : "Shuffle Now"}
-          </Button>
-
-          <Button mode="outlined" onPress={handleTryAgain}>
-            Reset
-          </Button>
-        </View>
-      )}
       {/* ELIMINATION MODE */}
       {phase === "eliminate" && (
         <View style={[styles.container, { flex: 0 }]}>
@@ -1161,7 +1653,7 @@ export default function ShuffleScreen() {
           ) : null}
           {loading ? (
             <View>
-              {Array.from({ length: parseInt(numberDisplayed) || 5 }).map(
+              {Array.from({ length: parseInt(numberDisplayed) || 10 }).map(
                 (_, index) => (
                   <HomeSkeleton key={index} />
                 )
@@ -1209,7 +1701,6 @@ export default function ShuffleScreen() {
                         },
                       ]}
                     >
-                      {/* Rest of the card stays exactly the same */}
                       <View style={{ position: "relative" }}>
                         {imageUrl ? (
                           <Card.Cover
@@ -1266,7 +1757,6 @@ export default function ShuffleScreen() {
                         </View>
                       </View>
 
-                      {/* Info Section */}
                       <View style={{ padding: 16 }}>
                         <Text
                           style={{
@@ -1279,7 +1769,6 @@ export default function ShuffleScreen() {
                           {item.name}
                         </Text>
 
-                        {/* Meta Row - Rating, Reviews, Price */}
                         <View
                           style={{
                             flexDirection: "row",
@@ -1326,7 +1815,6 @@ export default function ShuffleScreen() {
                           )}
                         </View>
 
-                        {/* Hours Row */}
                         {(item.isOpen !== null ||
                           (item.hours && item.hours.length > 0)) && (
                           <View
@@ -1374,7 +1862,6 @@ export default function ShuffleScreen() {
                           </View>
                         )}
 
-                        {/* Address */}
                         {item.address && (
                           <Text
                             style={{
@@ -1387,7 +1874,6 @@ export default function ShuffleScreen() {
                           </Text>
                         )}
 
-                        {/* Distance */}
                         {item.distanceMiles != null && (
                           <Text
                             style={{
@@ -1474,6 +1960,39 @@ export default function ShuffleScreen() {
           )}
         </View>
       )}
+
+      {/* Modals */}
+      <LocationSelector
+        visible={showLocationSelector}
+        onDismiss={() => setShowLocationSelector(false)}
+        onLocationSelected={(location) => {
+          setPendingLocation(location);
+        }}
+        currentLocation={pendingLocation}
+        onOpenMapPicker={() => setShowMapPicker(true)}
+      />
+
+      <MapLocationPicker
+        visible={showMapPicker}
+        onDismiss={() => setShowMapPicker(false)}
+        onLocationSelected={(location) => {
+          setPendingLocation(location);
+        }}
+        initialLocation={
+          pendingLocation
+            ? {
+                latitude: pendingLocation.latitude,
+                longitude: pendingLocation.longitude,
+              }
+            : selectedLocation
+            ? {
+                latitude: selectedLocation.latitude,
+                longitude: selectedLocation.longitude,
+              }
+            : undefined
+        }
+      />
+
       <UpgradeModal
         visible={showShuffleUpgradeModal}
         onDismiss={() => setShowShuffleUpgradeModal(false)}
@@ -1486,13 +2005,19 @@ export default function ShuffleScreen() {
           setShuffleSource(null);
           setShuffleLabel("");
           setListsExpanded(false);
+          setFiltersExpanded(false);
+          setFavoritesExpanded(false);
+          setLikedExpanded(false);
+          setSurpriseExpanded(false);
         }}
       />
+
       <RestaurantDetailModal
         visible={showDetails}
         onDismiss={() => setShowDetails(false)}
         restaurant={selectedRestaurant}
       />
+
       <Portal>
         <Modal
           visible={hoursModalVisible}
@@ -1542,6 +2067,7 @@ export default function ShuffleScreen() {
           </Button>
         </Modal>
       </Portal>
+
       {/* Winner Modal */}
       <Portal>
         <Modal
@@ -1560,7 +2086,6 @@ export default function ShuffleScreen() {
         >
           {winner && (
             <View>
-              {/* Header with emoji */}
               <View
                 style={{
                   alignItems: "center",
@@ -1583,7 +2108,6 @@ export default function ShuffleScreen() {
                 </Text>
               </View>
 
-              {/* Restaurant Details */}
               <View style={{ padding: 20 }}>
                 <Text
                   style={{
@@ -1597,7 +2121,6 @@ export default function ShuffleScreen() {
                   {winner.name}
                 </Text>
 
-                {/* Meta Row - Rating, Reviews, Price */}
                 <View
                   style={{
                     flexDirection: "row",
@@ -1644,7 +2167,6 @@ export default function ShuffleScreen() {
                   )}
                 </View>
 
-                {/* Hours Row */}
                 {(winner.isOpen !== null ||
                   (winner.hours && winner.hours.length > 0)) && (
                   <View
@@ -1692,7 +2214,6 @@ export default function ShuffleScreen() {
                   </View>
                 )}
 
-                {/* Address */}
                 {winner.address && (
                   <Text
                     style={{
@@ -1706,7 +2227,6 @@ export default function ShuffleScreen() {
                   </Text>
                 )}
 
-                {/* Distance */}
                 {winner.distanceMiles != null && (
                   <Text
                     style={{
@@ -1720,9 +2240,7 @@ export default function ShuffleScreen() {
                   </Text>
                 )}
 
-                {/* Action Buttons */}
                 <View style={{ gap: 12, marginTop: 8 }}>
-                  {/* Map Buttons */}
                   <View
                     style={{
                       flexDirection: "row",
@@ -1830,9 +2348,9 @@ const styles = StyleSheet.create({
   sourceCard: {
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    elevation: 2,
-    overflow: "hidden",
-    marginBottom: 12,
+    marginBottom: 14,
+    paddingVertical: 25,
+    paddingHorizontal: 16,
   },
   shuffleButton: {
     marginTop: 16,

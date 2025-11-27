@@ -63,12 +63,18 @@ export default function HomeSwipeCard({
       : [defaultPhoto]
   );
   const [hoursVisible, setHoursVisible] = useState(false);
+  const [hintVisible, setHintVisible] = useState(true);
   const hours = restaurant.hours ?? [];
   const isOpen = restaurant.isOpen ?? null;
 
   const likeScale = useRef(new Animated.Value(1)).current;
   const dislikeScale = useRef(new Animated.Value(1)).current;
   const undoScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setHintVisible(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const formatAddress = (address: string | null | undefined): string => {
     if (!address) return "";
@@ -106,6 +112,7 @@ export default function HomeSwipeCard({
   };
 
   const handleNextPhoto = () => {
+    setHintVisible(false);
     if (photos.length <= 1) return;
     setActiveIndex((prev) => (prev + 1) % photos.length);
   };
@@ -120,7 +127,10 @@ export default function HomeSwipeCard({
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={handleNextPhoto}
-        onLongPress={() => setViewerVisible(true)}
+        onLongPress={() => {
+          setHintVisible(false);
+          setViewerVisible(true);
+        }}
       >
         <Image
           source={{ uri: currentPhoto }}
@@ -318,7 +328,7 @@ export default function HomeSwipeCard({
           <Animated.View style={{ transform: [{ scale: likeScale }] }}>
             <IconButton
               icon="heart"
-              size={36}
+              size={40}
               mode="contained"
               style={[
                 styles.actionBtn,
@@ -419,8 +429,9 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     justifyContent: "space-evenly",
-    marginTop: 20,
-    paddingVertical: 10,
+    marginTop: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   actionBtn: { elevation: 6 },
   actionBtnSmall: { elevation: 5 },
