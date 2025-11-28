@@ -8,7 +8,7 @@ import { supabase } from "../utils/supabaseClient";
 import {
   HomeScreen,
   ShuffleScreen,
-  SavedScreen,
+  AccountScreen,
   SearchScreen,
   LoginScreen,
   SignupScreen,
@@ -16,6 +16,9 @@ import {
   RestaurantDetailScreen,
   FavoritesDetailScreen,
   JoinListScreen,
+  FriendsScreen,
+  WinnersDetailScreen,
+  SettingsScreen,
 } from "../screens";
 import { Session } from "@supabase/supabase-js";
 import { AuthStackParamList, RootStackParamList, TabParamList } from "./types";
@@ -23,18 +26,24 @@ import { AuthStackParamList, RootStackParamList, TabParamList } from "./types";
 const Tab = createBottomTabNavigator<TabParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const RootStack = createNativeStackNavigator<RootStackParamList>();
-const MyStuffStack = createNativeStackNavigator();
+const AccountStack = createNativeStackNavigator();
 
-function MyStuffNavigator() {
+function AccountNavigator() {
   return (
-    <MyStuffStack.Navigator screenOptions={{ headerShown: false }}>
-      <MyStuffStack.Screen name="SavedMain" component={SavedScreen} />
-      <MyStuffStack.Screen name="ListDetail" component={ListDetailScreen} />
-      <MyStuffStack.Screen
+    <AccountStack.Navigator screenOptions={{ headerShown: false }}>
+      <AccountStack.Screen name="AccountMain" component={AccountScreen} />
+      <AccountStack.Screen name="ListDetail" component={ListDetailScreen} />
+      <AccountStack.Screen
         name="FavoritesDetail"
         component={FavoritesDetailScreen}
       />
-    </MyStuffStack.Navigator>
+      <AccountStack.Screen
+        name="WinnersDetail"
+        component={WinnersDetailScreen}
+      />
+      <AccountStack.Screen name="Friends" component={FriendsScreen} />
+      <AccountStack.Screen name="Settings" component={SettingsScreen} />
+    </AccountStack.Navigator>
   );
 }
 
@@ -56,7 +65,7 @@ function TabNavigator() {
           let icon: keyof typeof MaterialIcons.glyphMap = "restaurant-menu";
           if (route.name === "Shuffle") icon = "shuffle";
           if (route.name === "Search") icon = "search";
-          if (route.name === "My Stuff") icon = "favorite";
+          if (route.name === "Account") icon = "favorite";
           return <MaterialIcons name={icon} size={size} color={color} />;
         },
       })}
@@ -64,7 +73,7 @@ function TabNavigator() {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Shuffle" component={ShuffleScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
-      <Tab.Screen name="My Stuff" component={MyStuffNavigator} />
+      <Tab.Screen name="Account" component={AccountNavigator} />
     </Tab.Navigator>
   );
 }

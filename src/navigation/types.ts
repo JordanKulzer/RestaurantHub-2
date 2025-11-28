@@ -1,5 +1,3 @@
-// types.ts
-
 export type AuthStackParamList = {
   Login: undefined;
   Signup: undefined;
@@ -25,4 +23,18 @@ export type TabParamList = {
   Shuffle: undefined;
   Search: undefined;
   Account: undefined;
+};
+
+export type AccountStackParamList = {
+  AccountMain: undefined;
+  ListDetail: {
+    listId: string;
+    title: string;
+  };
+  FavoritesDetail: {
+    title: string;
+  };
+  WinnersDetail: undefined;
+  Friends: undefined;
+  Settings: undefined;
 };

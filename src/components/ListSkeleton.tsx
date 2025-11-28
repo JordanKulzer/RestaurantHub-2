@@ -34,21 +34,22 @@ export default function ListSkeleton() {
       style={[
         styles.container,
         {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.tertiary,
+          backgroundColor: theme.dark
+            ? theme.colors.elevation.level1
+            : theme.colors.surface,
         },
       ]}
     >
       <View style={styles.row}>
-        {/* Avatar circle */}
-        <Animated.View style={[styles.avatar, { backgroundColor }]} />
+        {/* Icon (larger square with rounded corners) */}
+        <Animated.View style={[styles.icon, { backgroundColor }]} />
 
         <View style={styles.content}>
           {/* Title */}
           <Animated.View style={[styles.title, { backgroundColor }]} />
 
-          {/* Subtitle */}
-          <Animated.View style={[styles.subtitle, { backgroundColor }]} />
+          {/* Place count */}
+          <Animated.View style={[styles.placeCount, { backgroundColor }]} />
         </View>
 
         {/* Chevron */}
@@ -60,40 +61,45 @@ export default function ListSkeleton() {
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 16,
-    marginBottom: 14,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
     paddingHorizontal: 16,
+    marginBottom: 1,
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
+  icon: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    marginRight: 16,
   },
   content: {
     flex: 1,
   },
   title: {
-    height: 16,
-    width: "50%",
+    height: 17,
+    width: "60%",
     borderRadius: 4,
     marginBottom: 8,
   },
-  subtitle: {
-    height: 12,
-    width: "30%",
+  placeCount: {
+    height: 14,
+    width: "35%",
     borderRadius: 4,
   },
   chevron: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
 });

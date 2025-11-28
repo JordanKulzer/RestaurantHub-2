@@ -50,11 +50,13 @@ import { getFavorites } from "../utils/favoritesApis";
 import { RestaurantPointer } from "../utils/restaurantPointers";
 import { getLocationCached } from "../utils/locationHelper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { addWinner, getWinners, winnersToPointers } from "../utils/winnersApi";
 
 type Phase = "choose-source" | "eliminate";
 type ShuffleSource =
   | "favorites"
   | "liked"
+  | "winners"
   | "lists"
   | "filters"
   | "surprise"
@@ -128,6 +130,10 @@ export default function ShuffleScreen() {
   // LISTS (for expandable "Lists" card)
   const [preloadedLists, setPreloadedLists] = useState<any[]>([]);
   const [listsExpanded, setListsExpanded] = useState(false);
+
+  // WINNERS
+  const [winnersPool, setWinnersPool] = useState<HomeRestaurant[]>([]);
+  const [winnersExpanded, setWinnersExpanded] = useState(false);
 
   // FILTERS (for expandable "Filters" card)
   const [filtersExpanded, setFiltersExpanded] = useState(false);
@@ -364,6 +370,32 @@ export default function ShuffleScreen() {
     };
 
     loadLiked();
+  }, [isFocused]);
+
+  useEffect(() => {
+    if (!isFocused) return;
+
+    const loadWinners = async () => {
+      try {
+        const winners = await getWinners();
+        const pointers = winnersToPointers(winners);
+
+        const upgraded = pointers.map((ptr: any) =>
+          upgradeLikedEntry({
+            id: ptr.id,
+            name: ptr.name,
+            address: ptr.address,
+            source: ptr.source,
+          })
+        );
+
+        setWinnersPool(upgraded);
+      } catch (e) {
+        console.error("Error loading winners:", e);
+      }
+    };
+
+    loadWinners();
   }, [isFocused]);
 
   const handleBackToSource = () => {
@@ -613,6 +645,22 @@ export default function ShuffleScreen() {
       return;
     }
 
+    if (key === "winners") {
+      setShuffleLabel("Choose Your Winner");
+      setPhase("eliminate");
+
+      if (!winnersPool.length) {
+        setRestaurants([]);
+        setNoResults(true);
+        return;
+      }
+
+      setRestaurants(winnersPool);
+      incrementShuffleCount();
+      setNoResults(false);
+      return;
+    }
+
     if (key === "lists") {
       setShuffleLabel("Choose Your Winner");
       setPhase("choose-source");
@@ -713,6 +761,17 @@ export default function ShuffleScreen() {
       setPendingDistance(distance);
       setPendingNumber(numberDisplayed);
       setPendingLocation(selectedLocation);
+    }
+  };
+
+  const toggleWinnersExpand = () => {
+    setWinnersExpanded((prev) => !prev);
+    if (!winnersExpanded) {
+      setListsExpanded(false);
+      setFiltersExpanded(false);
+      setFavoritesExpanded(false);
+      setLikedExpanded(false);
+      setSurpriseExpanded(false);
     }
   };
 
@@ -862,6 +921,18 @@ export default function ShuffleScreen() {
 
       if (remaining.length === 1) {
         setWinner(remaining[0]);
+
+        // ✅ Save winner to storage
+        addWinner(
+          {
+            id: remaining[0].id,
+            name: remaining[0].name,
+            address: remaining[0].address ?? null,
+            source: remaining[0].source as "google" | "yelp",
+          },
+          shuffleSource || undefined
+        ).catch((err) => console.error("Error saving winner:", err));
+
         setTimeout(() => {
           setShowWinnerModal(true);
         }, 300);
@@ -885,6 +956,7 @@ export default function ShuffleScreen() {
     setFiltersExpanded(false);
     setFavoritesExpanded(false);
     setLikedExpanded(false);
+    setWinnersExpanded(false);
     setSurpriseExpanded(false);
     setWinner(null);
     resetAnimatedValues();
@@ -1515,6 +1587,97 @@ export default function ShuffleScreen() {
                       </Button>
                     </View>
                   )}
+                </View>
+              )}
+            </TouchableOpacity>
+            {/* PREVIOUS WINNERS */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={toggleWinnersExpand}
+              style={[
+                styles.sourceCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderBottomColor: theme.colors.outlineVariant,
+                },
+              ]}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flex: 1,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      backgroundColor: theme.colors.secondary + "20",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginRight: 16,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="trophy"
+                      size={24}
+                      color={theme.colors.secondary}
+                    />
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={dyn.sourceText(theme)}>Previous Winners</Text>
+                  </View>
+                </View>
+
+                <MaterialCommunityIcons
+                  name={winnersExpanded ? "chevron-down" : "chevron-right"}
+                  size={24}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </View>
+
+              {winnersExpanded && (
+                <View style={{ marginTop: 16 }}>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: theme.colors.onSurface + "99",
+                      marginBottom: 16,
+                      lineHeight: 20,
+                    }}
+                  >
+                    Shuffle from all your past winners! Every time you complete
+                    a shuffle, the winning restaurant is automatically saved
+                    here for easy access.
+                  </Text>
+                  <Button
+                    mode="outlined"
+                    onPress={() => handleSelectSource("winners")}
+                    loading={loading && shuffleSource === "winners"}
+                    disabled={loading}
+                    style={[
+                      { borderRadius: 25 },
+                      {
+                        backgroundColor: theme.colors.primary + "15",
+                        borderColor: theme.colors.primary,
+                        borderWidth: 1,
+                      },
+                    ]}
+                    labelStyle={{ color: theme.colors.onSecondaryContainer }}
+                    contentStyle={{ paddingVertical: 4 }}
+                  >
+                    Shuffle Now
+                  </Button>
                 </View>
               )}
             </TouchableOpacity>

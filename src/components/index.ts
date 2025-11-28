@@ -11,3 +11,4 @@ export { default as ListSkeleton } from "./ListSkeleton";
 export { default as AccountModal } from "./AccountModal";
 export { default as ShuffleSessionSelector } from "./ShuffleSessionSelector";
 export { default as CollaborativeModal } from "./CollaborativeModal";
+export { default as AccountSkeleton } from "./AccountSkeleton";
