@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import CreateListModal from "../components/CreateListModal";
 import { getLists, ListWithCount } from "../utils/listsApi";
 import { getFavorites } from "../utils/favoritesApis";
@@ -93,12 +94,30 @@ export default function SavedScreen() {
     setThemeMode(isDarkMode ? "light" : "dark");
   };
 
+  const getListColor = (id: string, isFavorites: boolean) => {
+    if (isFavorites) return theme.colors.tertiary;
+    // Generate consistent color based on list id
+    const colors = [
+      theme.colors.tertiary,
+      theme.colors.primary,
+      theme.colors.secondary,
+      "#8B5CF6", // purple
+      "#EC4899", // pink
+      "#F59E0B", // amber
+    ];
+    const index =
+      id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) %
+      colors.length;
+    return colors[index];
+  };
+
   const renderListCard = ({ item }: { item: CombinedListItem }) => {
     const isFavorites = "isFavorites" in item && item.isFavorites;
+    const listColor = getListColor(item.id, isFavorites);
 
     return (
       <TouchableOpacity
-        activeOpacity={0.9}
+        activeOpacity={0.7}
         onPress={() => {
           if (isFavorites) {
             navigation.navigate("FavoritesDetail", {
@@ -111,80 +130,61 @@ export default function SavedScreen() {
             });
           }
         }}
+        style={[
+          styles.listItemContainer,
+          {
+            backgroundColor: isDarkMode
+              ? theme.colors.elevation.level1
+              : theme.colors.surface,
+          },
+        ]}
       >
-        <Card
-          mode="elevated"
-          style={[
-            styles.fullListCard,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.tertiary,
-            },
-          ]}
-        >
-          <View style={styles.fullListCardRow}>
-            {isFavorites && (
-              <Avatar.Icon
-                size={40}
-                icon="heart"
-                color={theme.colors.surface}
-                style={{
-                  backgroundColor: theme.colors.tertiary,
-                  marginRight: 12,
-                }}
-              />
-            )}
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: "600",
-                  color: isFavorites
-                    ? theme.colors.onTertiaryContainer
-                    : theme.colors.onSurface,
-                }}
-                numberOfLines={1}
-              >
-                {item.title}
-              </Text>
+        {/* Left side - Icon */}
+        <View style={[styles.listIcon, { backgroundColor: listColor }]}>
+          <MaterialCommunityIcons
+            name={isFavorites ? "heart" : "silverware-fork-knife"}
+            size={28}
+            color="#fff"
+          />
+        </View>
 
-              {item.description ? (
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: theme.colors.onSurfaceVariant,
-                    marginTop: 4,
-                  }}
-                  numberOfLines={2}
-                >
-                  {item.description}
-                </Text>
-              ) : null}
+        {/* Middle - Text content */}
+        <View style={styles.listContent}>
+          <Text
+            style={[styles.listName, { color: theme.colors.onSurface }]}
+            numberOfLines={1}
+          >
+            {item.title}
+          </Text>
 
-              <Text
-                style={{
-                  marginTop: 6,
-                  fontSize: 12,
-                  color: isFavorites
-                    ? theme.colors.onTertiaryContainer
-                    : theme.colors.onSurfaceVariant,
-                }}
-              >
-                {item.placesCount} place{item.placesCount === 1 ? "" : "s"}
-              </Text>
-            </View>
+          {item.description && !isFavorites ? (
+            <Text
+              style={[
+                styles.listDescription,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+              numberOfLines={1}
+            >
+              {item.description}
+            </Text>
+          ) : null}
 
-            <IconButton
-              icon="chevron-right"
-              size={22}
-              iconColor={
-                isFavorites
-                  ? theme.colors.onTertiaryContainer
-                  : theme.colors.onSurfaceVariant
-              }
-            />
-          </View>
-        </Card>
+          <Text
+            style={[
+              styles.placeCount,
+              { color: theme.colors.onSurfaceVariant },
+            ]}
+          >
+            {item.placesCount} place{item.placesCount === 1 ? "" : "s"}
+          </Text>
+        </View>
+
+        {/* Right - Chevron */}
+        <MaterialCommunityIcons
+          name="chevron-right"
+          size={24}
+          color={theme.colors.onSurfaceVariant}
+        />
       </TouchableOpacity>
     );
   };
@@ -230,17 +230,6 @@ export default function SavedScreen() {
           >
             Lists
           </Text>
-          {lists.length > 0 && (
-            <Button
-              icon="plus"
-              mode="text"
-              compact
-              textColor={theme.colors.primary}
-              onPress={() => setShowCreateModal(true)}
-            >
-              Create a new list
-            </Button>
-          )}
         </View>
 
         {loadingLists ? (
@@ -267,51 +256,94 @@ export default function SavedScreen() {
               contentContainerStyle={{ paddingHorizontal: 16 }}
             />
 
-            <Surface
+            {/* Create First List Button */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setShowCreateModal(true)}
               style={[
-                styles.emptySurface,
-                { backgroundColor: theme.colors.surface, marginTop: 14 },
+                styles.createListItem,
+                {
+                  backgroundColor: isDarkMode
+                    ? theme.colors.elevation.level1
+                    : theme.colors.surface,
+                },
               ]}
             >
-              <Text
+              <View
                 style={[
-                  styles.emptyText,
-                  { color: theme.colors.onSurfaceVariant },
+                  styles.createListIcon,
+                  { backgroundColor: theme.colors.primary + "20" },
                 ]}
               >
-                No lists created yet.
-              </Text>
-              <Text
-                style={{
-                  color: theme.colors.onSurfaceVariant,
-                  fontSize: 13,
-                  marginBottom: 14,
-                }}
-              >
-                Start a list for date nights, brunch spots, or travel ideas.
-              </Text>
-              <Button
-                mode="contained"
-                onPress={() => setShowCreateModal(true)}
-                textColor={theme.colors.surface}
-                style={{
-                  backgroundColor: theme.colors.tertiary,
-                  borderRadius: 999,
-                  paddingHorizontal: 14,
-                }}
-              >
-                Create your first list
-              </Button>
-            </Surface>
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={32}
+                  color={theme.colors.primary}
+                />
+              </View>
+
+              <View style={styles.listContent}>
+                <Text
+                  style={[
+                    styles.createListText,
+                    { color: theme.colors.primary },
+                  ]}
+                >
+                  Create a new list
+                </Text>
+              </View>
+            </TouchableOpacity>
           </>
         ) : (
-          <FlatList
-            data={combinedData}
-            renderItem={renderListCard}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            contentContainerStyle={{ paddingHorizontal: 16 }}
-          />
+          <>
+            <FlatList
+              data={combinedData}
+              renderItem={renderListCard}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              contentContainerStyle={{ paddingHorizontal: 16 }}
+            />
+
+            {/* Create New List Button */}
+            <View style={{ paddingHorizontal: 16 }}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setShowCreateModal(true)}
+                style={[
+                  styles.createListItem,
+                  {
+                    backgroundColor: isDarkMode
+                      ? theme.colors.elevation.level1
+                      : theme.colors.surface,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.createListIcon,
+                    { backgroundColor: theme.colors.primary + "20" },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="plus"
+                    size={32}
+                    color={theme.colors.primary}
+                  />
+                </View>
+
+                <View style={styles.listContent}>
+                  <Text
+                    style={[
+                      styles.createListText,
+                      { color: theme.colors.primary },
+                    ]}
+                  >
+                    Create a new list
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
       </ScrollView>
 
@@ -367,26 +399,63 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 6,
   },
-  accountCard: {
-    marginHorizontal: 16,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 26,
-  },
-  accountRow: {
+  listItemContainer: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  fullListCard: {
-    borderRadius: 0,
-    borderWidth: StyleSheet.hairlineWidth,
-    // marginBottom: 14,
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 16,
+    marginBottom: 1,
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
   },
-  fullListCardRow: {
+  listIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  listContent: {
+    flex: 1,
+  },
+  listName: {
+    fontSize: 17,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  listDescription: {
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  placeCount: {
+    fontSize: 14,
+  },
+  createListItem: {
     flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 1,
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  createListIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  createListText: {
+    fontSize: 17,
+    fontWeight: "600",
   },
 });

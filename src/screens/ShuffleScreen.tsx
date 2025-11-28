@@ -1012,7 +1012,6 @@ export default function ShuffleScreen() {
                 />
               </View>
             )}
-
             {/* Collaborative Session Banner (when active) */}
             {collaborativeMode && (
               <Surface
@@ -1084,7 +1083,6 @@ export default function ShuffleScreen() {
                 </View>
               </Surface>
             )}
-
             {/* Session Selector - Only show when NOT in collaborative mode */}
             {!collaborativeMode && (
               <ShuffleSessionSelector
@@ -1092,7 +1090,6 @@ export default function ShuffleScreen() {
                 onJoinSession={handleJoinCollaborative}
               />
             )}
-
             <Text
               style={{
                 fontSize: 14,
@@ -1105,35 +1102,63 @@ export default function ShuffleScreen() {
                 : "Pick your category, then eliminate restaurants one by one to find your winner!"}
             </Text>
             {/* FAVORITES */}
-            <Card
-              mode="elevated"
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={toggleFavoritesExpand}
               style={[
                 styles.sourceCard,
                 {
                   backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.tertiary,
+                  borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
             >
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={toggleFavoritesExpand}
+              <View
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
                 }}
               >
-                <Text style={dyn.sourceText(theme)}>Favorites</Text>
-                <Text
+                {/* Left - Icon */}
+                <View
                   style={{
-                    fontSize: 18,
-                    color: theme.colors.onSurfaceVariant,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flex: 1,
                   }}
                 >
-                  {favoritesExpanded ? "▼" : "▶"}
-                </Text>
-              </TouchableOpacity>
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      backgroundColor: theme.colors.tertiary + "20",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginRight: 16,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="heart"
+                      size={24}
+                      color={theme.colors.tertiary}
+                    />
+                  </View>
+
+                  {/* Middle - Text */}
+                  <View style={{ flex: 1 }}>
+                    <Text style={dyn.sourceText(theme)}>Favorites</Text>
+                  </View>
+                </View>
+
+                {/* Right - Arrow */}
+                <MaterialCommunityIcons
+                  name={favoritesExpanded ? "chevron-down" : "chevron-right"}
+                  size={24}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </View>
 
               {favoritesExpanded && (
                 <View style={{ marginTop: 16 }}>
@@ -1169,38 +1194,65 @@ export default function ShuffleScreen() {
                   </Button>
                 </View>
               )}
-            </Card>
-
+            </TouchableOpacity>
             {/* LIKED */}
-            <Card
-              mode="elevated"
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={toggleLikedExpand}
               style={[
                 styles.sourceCard,
                 {
                   backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.tertiary,
+                  borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
             >
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={toggleLikedExpand}
+              <View
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
                 }}
               >
-                <Text style={dyn.sourceText(theme)}>Liked</Text>
-                <Text
+                {/* Left - Icon */}
+                <View
                   style={{
-                    fontSize: 18,
-                    color: theme.colors.onSurfaceVariant,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flex: 1,
                   }}
                 >
-                  {likedExpanded ? "▼" : "▶"}
-                </Text>
-              </TouchableOpacity>
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      backgroundColor: theme.colors.primary + "20",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginRight: 16,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="thumb-up"
+                      size={24}
+                      color={theme.colors.primary}
+                    />
+                  </View>
+
+                  {/* Middle - Text */}
+                  <View style={{ flex: 1 }}>
+                    <Text style={dyn.sourceText(theme)}>Liked</Text>
+                  </View>
+                </View>
+
+                {/* Right - Arrow */}
+                <MaterialCommunityIcons
+                  name={likedExpanded ? "chevron-down" : "chevron-right"}
+                  size={24}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </View>
 
               {likedExpanded && (
                 <View style={{ marginTop: 16 }}>
@@ -1235,41 +1287,68 @@ export default function ShuffleScreen() {
                   </Button>
                 </View>
               )}
-            </Card>
-
+            </TouchableOpacity>
             {/* LISTS */}
-            <Card
-              mode="elevated"
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={toggleListsExpand}
               style={[
                 styles.sourceCard,
                 {
                   backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.tertiary,
+                  borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
             >
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={toggleListsExpand}
+              <View
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
                 }}
               >
-                <Text style={dyn.sourceText(theme)}>Lists</Text>
-                <Text
+                {/* Left - Icon */}
+                <View
                   style={{
-                    fontSize: 18,
-                    color: theme.colors.onSurfaceVariant,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flex: 1,
                   }}
                 >
-                  {listsExpanded ? "▼" : "▶"}
-                </Text>
-              </TouchableOpacity>
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      backgroundColor: theme.colors.secondary + "20",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginRight: 16,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="format-list-bulleted"
+                      size={24}
+                      color={theme.colors.secondary}
+                    />
+                  </View>
+
+                  {/* Middle - Text */}
+                  <View style={{ flex: 1 }}>
+                    <Text style={dyn.sourceText(theme)}>Lists</Text>
+                  </View>
+                </View>
+
+                {/* Right - Arrow */}
+                <MaterialCommunityIcons
+                  name={listsExpanded ? "chevron-down" : "chevron-right"}
+                  size={24}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </View>
 
               {listsExpanded && (
-                <View style={{ marginTop: 10 }}>
+                <View style={{ marginTop: 16 }}>
                   <Text
                     style={{
                       fontSize: 14,
@@ -1287,69 +1366,93 @@ export default function ShuffleScreen() {
                     nestedScrollEnabled={true}
                     showsVerticalScrollIndicator={true}
                   >
-                    {preloadedLists.map((item) => (
-                      <TouchableOpacity
-                        activeOpacity={0.9}
-                        key={item.id}
-                        onPress={() =>
-                          setPreloadedLists((prev) =>
-                            prev.map((x) =>
-                              x.id === item.id
-                                ? { ...x, selected: !x.selected }
-                                : x
+                    {preloadedLists.map((item) => {
+                      const listColor = item.selected
+                        ? theme.colors.primary
+                        : theme.colors.tertiary;
+
+                      return (
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          key={item.id}
+                          onPress={() =>
+                            setPreloadedLists((prev) =>
+                              prev.map((x) =>
+                                x.id === item.id
+                                  ? { ...x, selected: !x.selected }
+                                  : x
+                              )
                             )
-                          )
-                        }
-                        style={{
-                          flexDirection: "row",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          paddingVertical: 14,
-                          borderBottomWidth: StyleSheet.hairlineWidth,
-                          borderColor: theme.colors.outlineVariant,
-                        }}
-                      >
-                        <View
+                          }
                           style={{
                             flexDirection: "row",
                             alignItems: "center",
-                            gap: 8,
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            marginBottom: 8,
+                            borderRadius: 12,
+                            backgroundColor: item.selected
+                              ? theme.colors.primaryContainer
+                              : "transparent",
+                            borderWidth: 1,
+                            borderColor: item.selected
+                              ? theme.colors.primary
+                              : theme.colors.outlineVariant,
                           }}
                         >
-                          <IconButton
-                            icon={
-                              item.selected
-                                ? "check-circle"
-                                : "checkbox-blank-circle-outline"
-                            }
-                            size={20}
-                            iconColor={
-                              item.selected
-                                ? theme.colors.primary
-                                : theme.colors.onSurfaceVariant
-                            }
-                          />
-                          <Text
+                          {/* Left - Icon */}
+                          <View
                             style={{
-                              fontSize: 15,
-                              color: theme.colors.onSurface,
-                              fontWeight: item.selected ? "600" : "400",
+                              width: 40,
+                              height: 40,
+                              borderRadius: 8,
+                              justifyContent: "center",
+                              alignItems: "center",
+                              marginRight: 12,
+                              backgroundColor: item.selected
+                                ? listColor
+                                : listColor + "20",
                             }}
                           >
-                            {item.title}
-                          </Text>
-                        </View>
+                            <MaterialCommunityIcons
+                              name={
+                                item.selected
+                                  ? "check-circle"
+                                  : "silverware-fork-knife"
+                              }
+                              size={24}
+                              color={
+                                item.selected ? "#fff" : theme.colors.tertiary
+                              }
+                            />
+                          </View>
 
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            color: theme.colors.onSurfaceVariant,
-                          }}
-                        >
-                          {item.placesCount ?? 0} items
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                          {/* Middle - List info */}
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={{
+                                fontSize: 15,
+                                color: theme.colors.onSurface,
+                                fontWeight: item.selected ? "600" : "500",
+                                marginBottom: 2,
+                              }}
+                              numberOfLines={1}
+                            >
+                              {item.title}
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 13,
+                                color: theme.colors.onSurfaceVariant,
+                              }}
+                            >
+                              {item.placesCount ?? 0} place
+                              {item.placesCount === 1 ? "" : "s"}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </ScrollView>
 
                   {preloadedLists.length > 0 && (
@@ -1396,7 +1499,7 @@ export default function ShuffleScreen() {
                           handleListsSelected(ids, names);
                         }}
                         style={[
-                          { flex: 1, borderRadius: 25, marginRight: 14 },
+                          { flex: 1, borderRadius: 25 },
                           {
                             backgroundColor: theme.colors.primary + "15",
                             borderColor: theme.colors.primary,
@@ -1414,38 +1517,65 @@ export default function ShuffleScreen() {
                   )}
                 </View>
               )}
-            </Card>
-
+            </TouchableOpacity>
             {/* FILTERS - EXPANDABLE */}
-            <Card
-              mode="elevated"
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={toggleFiltersExpand}
               style={[
                 styles.sourceCard,
                 {
                   backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.tertiary,
+                  borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
             >
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={toggleFiltersExpand}
+              <View
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
                 }}
               >
-                <Text style={dyn.sourceText(theme)}>Filters</Text>
-                <Text
+                {/* Left - Icon */}
+                <View
                   style={{
-                    fontSize: 18,
-                    color: theme.colors.onSurfaceVariant,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flex: 1,
                   }}
                 >
-                  {filtersExpanded ? "▼" : "▶"}
-                </Text>
-              </TouchableOpacity>
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      backgroundColor: theme.colors.tertiary + "20",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginRight: 16,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="filter-variant"
+                      size={24}
+                      color={theme.colors.tertiary}
+                    />
+                  </View>
+
+                  {/* Middle - Text */}
+                  <View style={{ flex: 1 }}>
+                    <Text style={dyn.sourceText(theme)}>Filters</Text>
+                  </View>
+                </View>
+
+                {/* Right - Arrow */}
+                <MaterialCommunityIcons
+                  name={filtersExpanded ? "chevron-down" : "chevron-right"}
+                  size={24}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </View>
 
               {filtersExpanded && (
                 <View style={{ marginTop: 16 }}>
@@ -1773,38 +1903,65 @@ export default function ShuffleScreen() {
                   </View>
                 </View>
               )}
-            </Card>
-
+            </TouchableOpacity>
             {/* SURPRISE ME */}
-            <Card
-              mode="elevated"
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={toggleSurpriseExpand}
               style={[
                 styles.sourceCard,
                 {
                   backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.tertiary,
+                  borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
             >
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={toggleSurpriseExpand}
+              <View
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
                 }}
               >
-                <Text style={dyn.sourceText(theme)}>Surprise Me</Text>
-                <Text
+                {/* Left - Icon */}
+                <View
                   style={{
-                    fontSize: 18,
-                    color: theme.colors.onSurfaceVariant,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flex: 1,
                   }}
                 >
-                  {surpriseExpanded ? "▼" : "▶"}
-                </Text>
-              </TouchableOpacity>
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      backgroundColor: theme.colors.primary + "20",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginRight: 16,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="shimmer"
+                      size={24}
+                      color={theme.colors.primary}
+                    />
+                  </View>
+
+                  {/* Middle - Text */}
+                  <View style={{ flex: 1 }}>
+                    <Text style={dyn.sourceText(theme)}>Surprise Me</Text>
+                  </View>
+                </View>
+
+                {/* Right - Arrow */}
+                <MaterialCommunityIcons
+                  name={surpriseExpanded ? "chevron-down" : "chevron-right"}
+                  size={24}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </View>
 
               {surpriseExpanded && (
                 <View style={{ marginTop: 16 }}>
@@ -1840,7 +1997,7 @@ export default function ShuffleScreen() {
                   </Button>
                 </View>
               )}
-            </Card>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       )}
@@ -2548,18 +2705,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-
   header: { fontSize: 20, fontWeight: "700" },
-
   colorBar: { width: 5, height: 20, borderRadius: 4, marginRight: 6 },
-
   filterCard: {
     borderRadius: 16,
     padding: 12,
     marginBottom: 20,
     borderWidth: StyleSheet.hairlineWidth,
   },
-
   card: {
     marginBottom: 22,
     borderRadius: 20,
@@ -2568,10 +2721,12 @@ const styles = StyleSheet.create({
   },
   sourceCard: {
     borderRadius: 0,
-    borderWidth: StyleSheet.hairlineWidth,
-    // marginBottom: 14,
-    paddingVertical: 25,
-    paddingHorizontal: 16,
+    borderWidth: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    marginBottom: 0,
+    elevation: 0,
   },
   shuffleButton: {
     marginTop: 16,
@@ -2593,9 +2748,9 @@ export const dyn = {
   }),
 
   sourceText: (theme: MD3Theme) => ({
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "600" as const,
-    color: theme.colors.tertiary,
+    color: theme.colors.onSurface,
   }),
 
   expandArrow: (theme: MD3Theme) => ({
