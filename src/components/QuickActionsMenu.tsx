@@ -1,5 +1,5 @@
 // src/components/QuickActionsMenu.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Share, View } from "react-native";
 import {
   Menu,
@@ -8,6 +8,7 @@ import {
   Text,
   useTheme,
   Icon,
+  Portal,
 } from "react-native-paper";
 import { addFavorite, removeFavorite } from "../utils/favoritesApis";
 import { getLists, addToList, removeFromList } from "../utils/listsApi";
@@ -51,8 +52,9 @@ export default function QuickActionsMenu({
   const [lists, setLists] = useState<ListRow[]>(preloadedLists);
   const [memberships, setMemberships] = useState<MembershipMap>({});
   const [loadingLists, setLoadingLists] = useState(!listsReady);
+  const buttonRef = useRef<View>(null);
+  const [anchorPosition, setAnchorPosition] = useState({ x: 0, y: 0 });
 
-  // ✅ Use preloaded lists from parent
   useEffect(() => {
     if (preloadedLists.length > 0) {
       setLists(preloadedLists);
@@ -60,14 +62,25 @@ export default function QuickActionsMenu({
     }
   }, [preloadedLists]);
 
-  // ✅ Load memberships when restaurant changes
   useEffect(() => {
     if (restaurant?.id) {
       loadMemberships();
     }
   }, [restaurant?.id]);
 
-  const openMenu = () => setVisible(true);
+  const openMenu = () => {
+    if (buttonRef.current) {
+      buttonRef.current.measure((x, y, width, height, pageX, pageY) => {
+        setAnchorPosition({
+          x: pageX + width / 2,
+          y: pageY + height,
+        });
+        setVisible(true);
+      });
+    } else {
+      setVisible(true);
+    }
+  };
   const closeMenu = () => setVisible(false);
 
   const loadMemberships = async () => {
@@ -171,11 +184,8 @@ export default function QuickActionsMenu({
   );
 
   return (
-    <Menu
-      key={visible ? "open" : "closed"}
-      visible={visible}
-      onDismiss={closeMenu}
-      anchor={
+    <>
+      <View ref={buttonRef} collapsable={false}>
         <IconButton
           icon="plus-circle-outline"
           size={26}
@@ -189,69 +199,27 @@ export default function QuickActionsMenu({
             marginTop: -10,
           }}
         />
-      }
-      contentStyle={{
-        backgroundColor: theme.colors.surface,
-        borderRadius: 16,
-        paddingVertical: 4,
-        shadowColor: "#000",
-        shadowOpacity: 0.12,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 2 },
-        elevation: 5,
-        width: 240,
-      }}
-      anchorPosition="bottom"
-    >
-      {/* Section Header */}
-      <View style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
-        <Text
-          style={{
-            color: theme.colors.tertiary,
-            fontWeight: "600",
-            fontSize: 13,
-          }}
-        >
-          Quick Actions
-        </Text>
       </View>
-
-      {/* ❤️ Favorites */}
-      <Menu.Item
-        onPress={handleToggleFavorite}
-        title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-        leadingIcon={() =>
-          renderIcon(
-            isFavorite ? "heart" : "heart-outline",
-            theme.colors.tertiary
-          )
-        }
-        titleStyle={{ color: theme.colors.tertiary }}
-        rippleColor={theme.colors.tertiary + "22"}
-      />
-
-      <Divider
-        style={{ backgroundColor: theme.colors.outlineVariant, opacity: 0.5 }}
-      />
-
-      {/* ➕ Create New List */}
-      <Menu.Item
-        onPress={handleCreateNewList}
-        title="Create New List"
-        leadingIcon={() => renderIcon("plus", theme.colors.tertiary)}
-        titleStyle={{ color: theme.colors.tertiary }}
-        rippleColor={theme.colors.tertiary + "22"}
-      />
-
-      {/* 🗂️ User Lists */}
-      {lists.length > 0 ? (
-        <>
-          <Divider
-            style={{
-              backgroundColor: theme.colors.outlineVariant,
-              opacity: 0.5,
-            }}
-          />
+      <Portal>
+        <Menu
+          key={visible ? "open" : "closed"}
+          visible={visible}
+          onDismiss={closeMenu}
+          anchor={anchorPosition}
+          contentStyle={{
+            backgroundColor: theme.colors.surface,
+            borderRadius: 16,
+            paddingVertical: 4,
+            shadowColor: "#000",
+            shadowOpacity: 0.12,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 5,
+            width: 240,
+          }}
+          anchorPosition="bottom"
+        >
+          {/* Section Header */}
           <View style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
             <Text
               style={{
@@ -260,71 +228,133 @@ export default function QuickActionsMenu({
                 fontSize: 13,
               }}
             >
-              Your Lists
+              Quick Actions
             </Text>
           </View>
 
-          {loadingLists ? (
+          {/* ❤️ Favorites */}
+          <Menu.Item
+            onPress={handleToggleFavorite}
+            title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+            leadingIcon={() =>
+              renderIcon(
+                isFavorite ? "heart" : "heart-outline",
+                theme.colors.tertiary
+              )
+            }
+            titleStyle={{ color: theme.colors.tertiary }}
+            rippleColor={theme.colors.tertiary + "22"}
+          />
+
+          <Divider
+            style={{
+              backgroundColor: theme.colors.outlineVariant,
+              opacity: 0.5,
+            }}
+          />
+
+          {/* ➕ Create New List */}
+          <Menu.Item
+            onPress={handleCreateNewList}
+            title="Create New List"
+            leadingIcon={() => renderIcon("plus", theme.colors.tertiary)}
+            titleStyle={{ color: theme.colors.tertiary }}
+            rippleColor={theme.colors.tertiary + "22"}
+          />
+
+          {/* 🗂️ User Lists */}
+          {lists.length > 0 ? (
+            <>
+              <Divider
+                style={{
+                  backgroundColor: theme.colors.outlineVariant,
+                  opacity: 0.5,
+                }}
+              />
+              <View style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
+                <Text
+                  style={{
+                    color: theme.colors.tertiary,
+                    fontWeight: "600",
+                    fontSize: 13,
+                  }}
+                >
+                  Your Lists
+                </Text>
+              </View>
+
+              {loadingLists ? (
+                <Menu.Item
+                  title="Loading lists…"
+                  disabled
+                  titleStyle={{ color: theme.colors.onSurfaceVariant }}
+                  leadingIcon={() =>
+                    renderIcon("clock-outline", theme.colors.tertiary)
+                  }
+                />
+              ) : (
+                lists.map((l) => {
+                  const membership = memberships[l.id];
+                  const isInList = !!membership;
+
+                  return (
+                    <Menu.Item
+                      key={l.id}
+                      onPress={() => handleToggleListItem(l.id)}
+                      title={
+                        isInList
+                          ? `Remove from ${l.title}`
+                          : `Add to ${l.title}`
+                      }
+                      leadingIcon={() =>
+                        renderIcon(
+                          isInList ? "playlist-remove" : "playlist-plus",
+                          isInList
+                            ? theme.colors.secondary
+                            : theme.colors.tertiary
+                        )
+                      }
+                      titleStyle={
+                        isInList
+                          ? { color: theme.colors.secondary }
+                          : { color: theme.colors.tertiary }
+                      }
+                      rippleColor={theme.colors.tertiary + "22"}
+                    />
+                  );
+                })
+              )}
+            </>
+          ) : (
             <Menu.Item
-              title="Loading lists…"
+              title="No lists available"
               disabled
-              titleStyle={{ color: theme.colors.onSurfaceVariant }}
+              titleStyle={{ color: theme.colors.tertiary + "88" }}
               leadingIcon={() =>
-                renderIcon("clock-outline", theme.colors.tertiary)
+                renderIcon("alert-circle-outline", theme.colors.tertiary)
               }
             />
-          ) : (
-            lists.map((l) => {
-              const membership = memberships[l.id];
-              const isInList = !!membership;
-
-              return (
-                <Menu.Item
-                  key={l.id}
-                  onPress={() => handleToggleListItem(l.id)}
-                  title={
-                    isInList ? `Remove from ${l.title}` : `Add to ${l.title}`
-                  }
-                  leadingIcon={() =>
-                    renderIcon(
-                      isInList ? "playlist-remove" : "playlist-plus",
-                      isInList ? theme.colors.secondary : theme.colors.tertiary
-                    )
-                  }
-                  titleStyle={
-                    isInList
-                      ? { color: theme.colors.secondary }
-                      : { color: theme.colors.tertiary }
-                  }
-                  rippleColor={theme.colors.tertiary + "22"}
-                />
-              );
-            })
           )}
-        </>
-      ) : (
-        <Menu.Item
-          title="No lists available"
-          disabled
-          titleStyle={{ color: theme.colors.tertiary + "88" }}
-          leadingIcon={() =>
-            renderIcon("alert-circle-outline", theme.colors.tertiary)
-          }
-        />
-      )}
 
-      <Divider
-        style={{ backgroundColor: theme.colors.outlineVariant, opacity: 0.5 }}
-      />
+          <Divider
+            style={{
+              backgroundColor: theme.colors.outlineVariant,
+              opacity: 0.5,
+            }}
+          />
 
-      {/* 📤 Share */}
-      <Menu.Item
-        onPress={handleShare}
-        title="Share"
-        leadingIcon={() => renderIcon("share-variant", theme.colors.tertiary)}
-        titleStyle={{ color: theme.colors.tertiary }}
-        rippleColor={theme.colors.tertiary + "22"}
-      />
-    </Menu>
+          {/* 📤 Share */}
+          <Menu.Item
+            onPress={handleShare}
+            title="Share"
+            leadingIcon={() =>
+              renderIcon("share-variant", theme.colors.tertiary)
+            }
+            titleStyle={{ color: theme.colors.tertiary }}
+            rippleColor={theme.colors.tertiary + "22"}
+          />
+        </Menu>
+      </Portal>
+    </>
   );
 }

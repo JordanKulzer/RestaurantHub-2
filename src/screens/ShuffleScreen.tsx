@@ -22,6 +22,7 @@ import {
   Modal,
   Portal,
   Chip,
+  Surface,
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -30,6 +31,8 @@ import {
   QuickActionsMenu,
   UpgradeModal,
   HomeSkeleton,
+  ShuffleSessionSelector,
+  CollaborativeModal,
 } from "../components";
 import LocationSelector, { LocationData } from "../components/LocationSelector";
 import MapLocationPicker from "../components/MapLocationPicker";
@@ -46,6 +49,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { getFavorites } from "../utils/favoritesApis";
 import { RestaurantPointer } from "../utils/restaurantPointers";
 import { getLocationCached } from "../utils/locationHelper";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 type Phase = "choose-source" | "eliminate";
 type ShuffleSource =
@@ -74,6 +78,17 @@ export default function ShuffleScreen() {
     fontWeight: "600" as const,
     fontSize: 13,
   });
+
+  // COLABORATIVE SHUFFLE
+  const [showCollaborativeModal, setShowCollaborativeModal] = useState(false);
+  const [collaborativeModalMode, setCollaborativeModalMode] = useState<
+    "host" | "join" | null
+  >(null);
+  const [collaborativeMode, setCollaborativeMode] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [isHost, setIsHost] = useState(false);
+  const [sessionParticipants, setSessionParticipants] = useState<any[]>([]);
+  const [sessionConnected, setSessionConnected] = useState(false);
 
   // LOCATION
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(
@@ -617,6 +632,64 @@ export default function ShuffleScreen() {
     }
   }
 
+  const handleStartCollaborative = () => {
+    setCollaborativeModalMode("host");
+    setShowCollaborativeModal(true);
+  };
+
+  const handleJoinCollaborative = () => {
+    setCollaborativeModalMode("join");
+    setShowCollaborativeModal(true);
+  };
+
+  const handleSessionCreated = (sessionId: string, sessionCode: string) => {
+    setActiveSessionId(sessionId);
+    setCollaborativeMode(true);
+    setIsHost(true);
+    // Modal stays open showing "waiting for friend"
+  };
+
+  const handleSessionJoined = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    setCollaborativeMode(true);
+    setIsHost(false);
+    setShowCollaborativeModal(false);
+
+    Toast.show({
+      type: "success",
+      text1: "Joined session! 🎉",
+      text2: "You can now shuffle together",
+      position: "bottom",
+    });
+  };
+
+  const handleExitCollaborative = async () => {
+    if (activeSessionId) {
+      // We'll add the actual leave function later
+      console.log("Leaving session:", activeSessionId);
+    }
+
+    // Reset all collaborative state
+    setActiveSessionId(null);
+    setCollaborativeMode(false);
+    setIsHost(false);
+    setSessionParticipants([]);
+    setSessionConnected(false);
+
+    // Reset shuffle state
+    setPhase("choose-source");
+    setShuffleSource(null);
+    setRestaurants([]);
+    setWinner(null);
+
+    Toast.show({
+      type: "info",
+      text1: "Left session",
+      text2: "You've exited the collaborative shuffle",
+      position: "bottom",
+    });
+  };
+
   const toggleListsExpand = () => {
     setListsExpanded((prev) => !prev);
     if (!listsExpanded) {
@@ -682,12 +755,22 @@ export default function ShuffleScreen() {
 
     try {
       const merged = await loadRestaurantsFromLists(listIds, listNames);
-      setRestaurants(merged);
-      if (!merged.length) setNoResults(true);
-      else {
-        setPhase("eliminate");
-        incrementShuffleCount();
+
+      if (merged.length === 0) {
+        setNoResults(true);
+        Toast.show({
+          type: "info",
+          text1: "Empty Lists",
+          text2: "The selected lists don't contain any restaurants yet.",
+          position: "bottom",
+        });
+        setLoading(false);
+        return;
       }
+
+      setRestaurants(merged);
+      setPhase("eliminate");
+      incrementShuffleCount();
     } catch (e) {
       console.error("loadRestaurantsFromLists failed:", e);
       Toast.show({
@@ -930,6 +1013,86 @@ export default function ShuffleScreen() {
               </View>
             )}
 
+            {/* Collaborative Session Banner (when active) */}
+            {collaborativeMode && (
+              <Surface
+                style={{
+                  padding: 16,
+                  borderRadius: 16,
+                  marginBottom: 16,
+                  marginTop: 8,
+                  backgroundColor: theme.colors.primary + "15",
+                }}
+                elevation={2}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="account-multiple"
+                      size={28}
+                      color={theme.colors.tertiary}
+                    />
+                    <View>
+                      <Text
+                        style={{
+                          color: theme.colors.onTertiaryContainer,
+                          fontWeight: "700",
+                          fontSize: 16,
+                        }}
+                      >
+                        Shuffling Together
+                      </Text>
+                      <Text
+                        style={{
+                          color: theme.colors.onTertiaryContainer,
+                          fontSize: 13,
+                          marginTop: 2,
+                        }}
+                      >
+                        {sessionParticipants.length} participant
+                        {sessionParticipants.length !== 1 ? "s" : ""}
+                        {sessionConnected ? " • Connected" : " • Connecting..."}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Button
+                    mode="text"
+                    icon="close"
+                    onPress={handleExitCollaborative}
+                    textColor={theme.colors.tertiary}
+                    compact
+                    style={{
+                      backgroundColor: theme.colors.tertiary + "20",
+                      borderRadius: 20,
+                    }}
+                  >
+                    Close
+                  </Button>
+                </View>
+              </Surface>
+            )}
+
+            {/* Session Selector - Only show when NOT in collaborative mode */}
+            {!collaborativeMode && (
+              <ShuffleSessionSelector
+                onStartCollaborative={handleStartCollaborative}
+                onJoinSession={handleJoinCollaborative}
+              />
+            )}
+
             <Text
               style={{
                 fontSize: 14,
@@ -937,10 +1100,10 @@ export default function ShuffleScreen() {
                 marginBottom: 16,
               }}
             >
-              Pick where to shuffle from, then eliminate one by one to find your
-              winner!
+              {collaborativeMode
+                ? "Choose options together, then shuffle to find your winner!"
+                : "Pick your category, then eliminate restaurants one by one to find your winner!"}
             </Text>
-
             {/* FAVORITES */}
             <Card
               mode="elevated"
@@ -987,11 +1150,20 @@ export default function ShuffleScreen() {
                     your winner.
                   </Text>
                   <Button
-                    mode="contained"
+                    mode="outlined"
                     onPress={() => handleSelectSource("favorites")}
-                    style={{ borderRadius: 25 }}
                     loading={loading && shuffleSource === "favorites"}
                     disabled={loading}
+                    style={[
+                      { borderRadius: 25 },
+                      {
+                        backgroundColor: theme.colors.primary + "15",
+                        borderColor: theme.colors.primary,
+                        borderWidth: 1,
+                      },
+                    ]}
+                    labelStyle={{ color: theme.colors.onSecondaryContainer }}
+                    contentStyle={{ paddingVertical: 4 }}
                   >
                     Shuffle Now
                   </Button>
@@ -1044,11 +1216,20 @@ export default function ShuffleScreen() {
                     Perfect for revisiting places you were interested in before.
                   </Text>
                   <Button
-                    mode="contained"
+                    mode="outlined"
                     onPress={() => handleSelectSource("liked")}
-                    style={{ borderRadius: 25 }}
                     loading={loading && shuffleSource === "liked"}
                     disabled={loading}
+                    style={[
+                      { borderRadius: 25 },
+                      {
+                        backgroundColor: theme.colors.primary + "15",
+                        borderColor: theme.colors.primary,
+                        borderWidth: 1,
+                      },
+                    ]}
+                    labelStyle={{ color: theme.colors.onSecondaryContainer }}
+                    contentStyle={{ paddingVertical: 4 }}
                   >
                     Shuffle Now
                   </Button>
@@ -1180,8 +1361,25 @@ export default function ShuffleScreen() {
                       }}
                     >
                       <Button
-                        mode="contained"
-                        style={{ flex: 1, borderRadius: 25, marginRight: 14 }}
+                        mode="outlined"
+                        onPress={() =>
+                          setPreloadedLists((prev) =>
+                            prev.map((x) => ({ ...x, selected: false }))
+                          )
+                        }
+                        contentStyle={{ paddingVertical: 4 }}
+                        style={{
+                          flex: 1,
+                          borderRadius: 25,
+                          borderColor: theme.colors.error,
+                          marginRight: 6,
+                        }}
+                        textColor={theme.colors.error}
+                      >
+                        Clear Lists
+                      </Button>
+                      <Button
+                        mode="outlined"
                         onPress={() => {
                           const chosen = preloadedLists.filter(
                             (x) => x.selected
@@ -1197,25 +1395,20 @@ export default function ShuffleScreen() {
                           const names = chosen.map((c: any) => c.title);
                           handleListsSelected(ids, names);
                         }}
+                        style={[
+                          { flex: 1, borderRadius: 25, marginRight: 14 },
+                          {
+                            backgroundColor: theme.colors.primary + "15",
+                            borderColor: theme.colors.primary,
+                            borderWidth: 1,
+                          },
+                        ]}
+                        labelStyle={{
+                          color: theme.colors.onSecondaryContainer,
+                        }}
+                        contentStyle={{ paddingVertical: 4 }}
                       >
                         Shuffle Now
-                      </Button>
-
-                      <Button
-                        mode="outlined"
-                        onPress={() =>
-                          setPreloadedLists((prev) =>
-                            prev.map((x) => ({ ...x, selected: false }))
-                          )
-                        }
-                        style={{
-                          flex: 1,
-                          borderRadius: 25,
-                          borderColor: theme.colors.error,
-                        }}
-                        textColor={theme.colors.error}
-                      >
-                        Clear
                       </Button>
                     </View>
                   )}
@@ -1546,17 +1739,6 @@ export default function ShuffleScreen() {
                     }}
                   >
                     <Button
-                      mode="contained"
-                      onPress={async () => {
-                        applyFilters();
-                        await handleShuffle();
-                      }}
-                      style={{ flex: 1, borderRadius: 25 }}
-                    >
-                      {loading ? "Shuffling..." : "Shuffle Now"}
-                    </Button>
-
-                    <Button
                       mode="outlined"
                       onPress={clearAllFilters}
                       style={{
@@ -1564,9 +1746,29 @@ export default function ShuffleScreen() {
                         borderRadius: 25,
                         borderColor: theme.colors.error,
                       }}
+                      contentStyle={{ paddingVertical: 4 }}
                       textColor={theme.colors.error}
                     >
-                      Clear
+                      Clear Filters
+                    </Button>
+                    <Button
+                      mode="outlined"
+                      onPress={async () => {
+                        applyFilters();
+                        await handleShuffle();
+                      }}
+                      style={[
+                        { flex: 1, borderRadius: 25 },
+                        {
+                          backgroundColor: theme.colors.primary + "15",
+                          borderColor: theme.colors.primary,
+                          borderWidth: 1,
+                        },
+                      ]}
+                      labelStyle={{ color: theme.colors.onSecondaryContainer }}
+                      contentStyle={{ paddingVertical: 4 }}
+                    >
+                      {loading ? "Shuffling..." : "Shuffle Now"}
                     </Button>
                   </View>
                 </View>
@@ -1619,11 +1821,20 @@ export default function ShuffleScreen() {
                     places!
                   </Text>
                   <Button
-                    mode="contained"
+                    mode="outlined"
                     onPress={() => handleSelectSource("surprise")}
-                    style={{ borderRadius: 25 }}
                     loading={loading && shuffleSource === "surprise"}
                     disabled={loading}
+                    style={[
+                      { borderRadius: 25 },
+                      {
+                        backgroundColor: theme.colors.primary + "15",
+                        borderColor: theme.colors.primary,
+                        borderWidth: 1,
+                      },
+                    ]}
+                    labelStyle={{ color: theme.colors.onSecondaryContainer }}
+                    contentStyle={{ paddingVertical: 4 }}
                   >
                     Shuffle Now
                   </Button>
@@ -2304,6 +2515,16 @@ export default function ShuffleScreen() {
           )}
         </Modal>
       </Portal>
+      <CollaborativeModal
+        visible={showCollaborativeModal}
+        onDismiss={() => {
+          setShowCollaborativeModal(false);
+          setCollaborativeModalMode(null);
+        }}
+        mode={collaborativeModalMode}
+        onSessionCreated={handleSessionCreated}
+        onSessionJoined={handleSessionJoined}
+      />
     </SafeAreaView>
   );
 }
@@ -2346,9 +2567,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   sourceCard: {
-    borderRadius: 16,
+    borderRadius: 0,
     borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 14,
+    // marginBottom: 14,
     paddingVertical: 25,
     paddingHorizontal: 16,
   },
@@ -2373,7 +2594,7 @@ export const dyn = {
 
   sourceText: (theme: MD3Theme) => ({
     fontSize: 16,
-    fontWeight: "500" as const,
+    fontWeight: "600" as const,
     color: theme.colors.tertiary,
   }),
 

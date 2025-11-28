@@ -9,3 +9,5 @@ export { default as UpgradeModal } from "./UpgradeModal";
 export { default as ListSettingsModal } from "./ListSettingsModal";
 export { default as ListSkeleton } from "./ListSkeleton";
 export { default as AccountModal } from "./AccountModal";
+export { default as ShuffleSessionSelector } from "./ShuffleSessionSelector";
+export { default as CollaborativeModal } from "./CollaborativeModal";

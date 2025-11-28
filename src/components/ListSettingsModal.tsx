@@ -23,6 +23,7 @@ import {
   Collaborator,
 } from "../utils/collaborationApi";
 import { updateList, deleteList } from "../utils/listsApi";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 interface ListSettingsModalProps {
   visible: boolean;
@@ -325,16 +326,30 @@ export default function ListSettingsModal({
                   />
 
                   <Button
-                    mode="contained"
+                    mode="outlined"
                     onPress={handleSaveChanges}
                     loading={saving}
                     disabled={saving || !editTitle.trim()}
                     style={[
                       styles.actionButton,
-                      { backgroundColor: theme.colors.primary },
+                      {
+                        backgroundColor: theme.colors.primary + "15",
+                        borderColor: theme.colors.primary,
+                        borderWidth: 1,
+                      },
                     ]}
-                    labelStyle={styles.actionButtonLabel}
-                    icon="content-save-outline"
+                    labelStyle={[
+                      styles.actionButtonLabel,
+                      { color: theme.colors.onSecondaryContainer },
+                    ]}
+                    icon={({ size, color }) => (
+                      <MaterialCommunityIcons
+                        name="content-save-outline"
+                        size={24}
+                        color={theme.colors.tertiary}
+                      />
+                    )}
+                    contentStyle={{ paddingVertical: 8 }}
                   >
                     Save Changes
                   </Button>
@@ -472,14 +487,28 @@ export default function ListSettingsModal({
                 ) : shareLink ? (
                   <View style={styles.linkContainer}>
                     <Button
-                      mode="contained"
-                      icon="share-variant-outline"
+                      mode="outlined"
                       onPress={handleShareLink}
                       style={[
                         styles.actionButton,
-                        { backgroundColor: theme.colors.tertiary },
+                        {
+                          backgroundColor: theme.colors.primary + "15",
+                          borderColor: theme.colors.primary,
+                          borderWidth: 1,
+                        },
                       ]}
-                      labelStyle={styles.actionButtonLabel}
+                      labelStyle={[
+                        styles.actionButtonLabel,
+                        { color: theme.colors.onSecondaryContainer },
+                      ]}
+                      icon={({ size, color }) => (
+                        <MaterialCommunityIcons
+                          name="share-variant-outline"
+                          size={24}
+                          color={theme.colors.tertiary}
+                        />
+                      )}
+                      contentStyle={{ paddingVertical: 8 }}
                     >
                       Share Invite Link
                     </Button>
@@ -530,7 +559,7 @@ export default function ListSettingsModal({
                       key={collab.id}
                       style={[
                         styles.collaboratorItem,
-                        { backgroundColor: theme.colors.surfaceVariant },
+                        { backgroundColor: theme.colors.primary + "15" },
                       ]}
                       elevation={1}
                     >

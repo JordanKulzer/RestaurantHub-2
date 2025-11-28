@@ -379,9 +379,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   fullListCard: {
-    borderRadius: 16,
+    borderRadius: 0,
     borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 14,
+    // marginBottom: 14,
     paddingVertical: 14,
     paddingHorizontal: 16,
   },

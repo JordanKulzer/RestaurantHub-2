@@ -23,7 +23,6 @@ import {
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import { useIsFocused } from "@react-navigation/native";
-
 import { fetchTextSearch, fetchRestaurantDetails } from "../utils/placesApi";
 import { CATEGORY_OPTIONS } from "../constants/categoryType";
 import RestaurantDetailModal from "../components/RestaurantDetailModal";

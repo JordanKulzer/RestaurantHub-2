@@ -10,6 +10,7 @@ import Toast from "react-native-toast-message";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ThemeProvider, useThemeMode } from "./src/contexts/ThemeContext";
+import toastConfig from "./src/config/toastConfig";
 
 function AppContent() {
   const { isDarkMode } = useThemeMode();
@@ -19,7 +20,7 @@ function AppContent() {
       <NavigationContainer theme={isDarkMode ? DarkTheme : DefaultTheme}>
         <AppNavigator />
       </NavigationContainer>
-      <Toast />
+      <Toast config={toastConfig} />
     </PaperProvider>
   );
 }
