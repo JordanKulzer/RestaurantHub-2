@@ -1,3 +1,4 @@
+// src/components/HomeSwipeCard.tsx
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
@@ -8,6 +9,7 @@ import {
   Platform,
   Animated,
   Easing,
+  Dimensions,
 } from "react-native";
 import {
   Card,
@@ -20,10 +22,12 @@ import {
 } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import ImageViewing from "react-native-image-viewing";
+import { Ionicons } from "@expo/vector-icons";
 
 import { HomeRestaurant } from "../types/homeRestaurant";
-import { fetchRestaurantInfo } from "../utils/fetchRestaurantInfo";
 import QuickActionsMenu from "./QuickActionsMenu";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 interface HomeSwipeCardProps {
   restaurant: HomeRestaurant;
@@ -55,6 +59,8 @@ export default function HomeSwipeCard({
     restaurant.image ||
     "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png";
 
+  const [leftTapFeedback, setLeftTapFeedback] = useState(false);
+  const [rightTapFeedback, setRightTapFeedback] = useState(false);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [photos, setPhotos] = useState<string[]>(
@@ -78,19 +84,15 @@ export default function HomeSwipeCard({
 
   const formatAddress = (address: string | null | undefined): string => {
     if (!address) return "";
-
     const parts = address.split(",").map((p) => p.trim());
-
     if (parts.length >= 3) {
       const stateZipPart = parts[2];
       const stateMatch = stateZipPart.match(/^([A-Z]{2})/);
-
       if (stateMatch) {
         const state = stateMatch[1];
         return `${parts[0]}, ${parts[1]}, ${state}`;
       }
     }
-
     return address;
   };
 
@@ -111,10 +113,28 @@ export default function HomeSwipeCard({
     ]).start(() => callback && callback());
   };
 
-  const handleNextPhoto = () => {
+  const handlePhotoTap = (event: any) => {
     setHintVisible(false);
     if (photos.length <= 1) return;
-    setActiveIndex((prev) => (prev + 1) % photos.length);
+
+    const { locationX } = event.nativeEvent;
+    const tapZone = SCREEN_WIDTH / 2;
+
+    if (locationX < tapZone) {
+      // Left half - go to previous photo
+      if (activeIndex > 0) {
+        setLeftTapFeedback(true);
+        setTimeout(() => setLeftTapFeedback(false), 200);
+        setActiveIndex(activeIndex - 1);
+      }
+    } else {
+      // Right half - go to next photo
+      if (activeIndex < photos.length - 1) {
+        setRightTapFeedback(true);
+        setTimeout(() => setRightTapFeedback(false), 200);
+        setActiveIndex(activeIndex + 1);
+      }
+    }
   };
 
   const currentPhoto = photos[activeIndex] || defaultPhoto;
@@ -126,7 +146,7 @@ export default function HomeSwipeCard({
     >
       <TouchableOpacity
         activeOpacity={0.9}
-        onPress={handleNextPhoto}
+        onPress={handlePhotoTap}
         onLongPress={() => {
           setHintVisible(false);
           setViewerVisible(true);
@@ -137,26 +157,50 @@ export default function HomeSwipeCard({
           style={styles.carouselImage}
           resizeMode="cover"
         />
+
+        {/* Left Tap Feedback */}
+        {leftTapFeedback && (
+          <View style={styles.leftTapOverlay}>
+            <View style={styles.tapFlash} />
+          </View>
+        )}
+
+        {/* Right Tap Feedback */}
+        {rightTapFeedback && (
+          <View style={styles.rightTapOverlay}>
+            <View style={styles.tapFlash} />
+          </View>
+        )}
+
+        {/* Photo Indicator Bars */}
+        {photos.length > 1 && (
+          <View style={styles.photoIndicatorBars}>
+            {photos.map((_, idx) => (
+              <View
+                key={idx}
+                style={[
+                  styles.photoBar,
+                  {
+                    backgroundColor:
+                      idx === activeIndex ? "#fff" : "rgba(255, 255, 255, 0.5)",
+                  },
+                ]}
+              />
+            ))}
+          </View>
+        )}
+
         <LinearGradient
           colors={["transparent", "rgba(0,0,0,0.6)"]}
           style={StyleSheet.absoluteFillObject}
         />
+
         <View
           style={{
             position: "absolute",
-            top: 0,
-            right: 0,
-            width: 50,
-            height: 50,
-            backgroundColor: theme.colors.secondary + "DD",
-            borderBottomLeftRadius: 20,
-            justifyContent: "center",
-            alignItems: "center",
-            elevation: 4,
-            shadowColor: "#000",
-            shadowOpacity: 0.3,
-            shadowRadius: 4,
-            shadowOffset: { width: 0, height: 2 },
+            top: 12,
+            right: 12,
+            zIndex: 20,
           }}
           pointerEvents="box-none"
         >
@@ -169,25 +213,26 @@ export default function HomeSwipeCard({
             listsReady={listsReady}
           />
         </View>
-        {photos.length > 1 && (
-          <View style={styles.photoIndicator}>
-            <Text style={styles.photoIndicatorText}>
-              {`${activeIndex + 1}/${photos.length}`}
-            </Text>
+
+        {hintVisible && photos.length > 1 && (
+          <View
+            style={[
+              styles.hintBadge,
+              { backgroundColor: theme.colors.secondary + "CC" },
+            ]}
+          >
+            <Text style={styles.hintText}>Tap left/right for more photos</Text>
           </View>
         )}
-        <View
-          style={[
-            styles.hintBadge,
-            { backgroundColor: theme.colors.secondary + "CC" },
-          ]}
-        >
-          <Text style={styles.hintText}>Tap photo for more</Text>
-        </View>
       </TouchableOpacity>
 
       <View style={styles.infoSection}>
-        <Text style={[styles.name, { color: theme.colors.onSurface }]}>
+        <Text
+          style={[styles.name, { color: theme.colors.onSurface }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+        >
           {restaurant.name}
         </Text>
 
@@ -268,7 +313,6 @@ export default function HomeSwipeCard({
         )}
 
         <View style={styles.linkRow}>
-          {/* Google Maps */}
           <Button
             mode="outlined"
             icon="google-maps"
@@ -279,7 +323,6 @@ export default function HomeSwipeCard({
             Google
           </Button>
 
-          {/* Apple Maps */}
           <Button
             mode="outlined"
             icon={Platform.OS === "ios" ? "map" : "map-marker"}
@@ -396,15 +439,53 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     borderRadius: 0,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
   },
   carouselImage: {
     width: "100%",
-    height: 240,
-    borderRadius: 10,
+    height: 320,
   },
-  infoSection: { padding: 16 },
+  photoIndicatorBars: {
+    position: "absolute",
+    bottom: 12,
+    left: 8,
+    right: 8,
+    flexDirection: "row",
+    gap: 4,
+    zIndex: 10,
+  },
+  photoBar: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+  },
+  leftTapOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: SCREEN_WIDTH / 2,
+    height: 320,
+    zIndex: 5,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  rightTapOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: SCREEN_WIDTH / 2,
+    height: 320,
+    zIndex: 5,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  tapFlash: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+  },
+  infoSection: {
+    padding: 16,
+  },
   name: { fontSize: 22, fontWeight: "700", marginBottom: 4 },
   detail: { fontSize: 13, marginBottom: 3 },
   metaRow: {
@@ -429,22 +510,12 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     justifyContent: "space-evenly",
-    marginTop: 14,
+    marginTop: 0,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   actionBtn: { elevation: 6 },
   actionBtnSmall: { elevation: 5 },
-  photoIndicator: {
-    position: "absolute",
-    bottom: 8,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  photoIndicatorText: { color: "#fff", fontSize: 12 },
   hintBadge: {
     position: "absolute",
     bottom: 10,
@@ -463,10 +534,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 8,
-  },
-  hoursText: {
-    fontSize: 14,
-    marginVertical: 2,
-    textAlign: "center",
   },
 });

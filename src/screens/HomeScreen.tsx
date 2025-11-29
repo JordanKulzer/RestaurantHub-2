@@ -298,7 +298,6 @@ export default function HomeScreen() {
           distanceFilter === "any" ? undefined : parseFloat(distanceFilter),
       });
 
-      // ✅ IMPROVED: Only filter by rating (distance is already handled by API radius)
       const filtered = results.filter((r) => {
         const ratingValue = Number(r.rating);
         const ratingMin = parseFloat(ratingFilter);
@@ -379,7 +378,7 @@ export default function HomeScreen() {
     if (hasLoadedOnce.current) {
       loadRestaurants();
     }
-  }, [selectedLocation]); // Reload when selectedLocation changes
+  }, [selectedLocation]);
 
   const renderModal = (type: string) => (
     <Portal>
@@ -387,7 +386,6 @@ export default function HomeScreen() {
         visible={activeModal === type}
         onDismiss={() => {
           setActiveModal(null);
-          // Don't auto-apply - let user click "Apply Filters"
         }}
         contentContainerStyle={[
           styles.modalContainer,
@@ -595,7 +593,7 @@ export default function HomeScreen() {
       <View style={{ flex: 1 }}>
         <View
           style={{
-            paddingHorizontal: 20,
+            paddingHorizontal: 5,
             paddingTop: 16,
             backgroundColor: theme.colors.background,
             zIndex: 10,
@@ -765,7 +763,7 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
-        <View style={{ flex: 1, marginTop: 10, marginBottom: 120 }}>
+        <View style={{ flex: 1 }}>
           {loading ? (
             <View style={{ flex: 1 }}>
               <HomeSkeleton />
@@ -906,8 +904,9 @@ export default function HomeScreen() {
                 verticalSwipe={false}
                 animateCardOpacity
                 cardVerticalMargin={0}
+                cardHorizontalMargin={0}
                 containerStyle={{ flex: 1 }}
-                cardStyle={{ height: "100%" }}
+                // cardStyle={{ height: "100%" }}
               />
             </Animated.View>
           )}

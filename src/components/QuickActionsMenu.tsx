@@ -189,7 +189,7 @@ export default function QuickActionsMenu({
         <IconButton
           icon="plus-circle-outline"
           size={26}
-          iconColor={theme.colors.tertiary}
+          iconColor="#fff"
           onPress={openMenu}
           style={{
             borderRadius: 50,
