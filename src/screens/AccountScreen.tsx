@@ -253,11 +253,20 @@ export default function AccountScreen() {
     ...lists,
   ];
 
-  const renderListCard = ({ item }: { item: CombinedListItem }) => {
+  const renderListCard = ({
+    item,
+    index,
+    total,
+  }: {
+    item: CombinedListItem;
+    index: number;
+    total: number;
+  }) => {
     const isFavorites = "isFavorites" in item && item.isFavorites;
     const isWinners = "isWinners" in item && item.isWinners;
     const listColor = getListColor(item.id, isFavorites, isWinners);
-
+    const isFirst = index === 0;
+    const isLast = index === total - 1;
     return (
       <TouchableOpacity
         activeOpacity={0.7}
@@ -278,9 +287,10 @@ export default function AccountScreen() {
         style={[
           styles.listItemContainer,
           {
-            backgroundColor: isDarkMode
-              ? theme.colors.elevation.level1
-              : theme.colors.surface,
+            backgroundColor: "transparent",
+            borderTopWidth: isFirst ? StyleSheet.hairlineWidth : 0,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderColor: theme.colors.outline,
           },
         ]}
       >
@@ -587,23 +597,31 @@ export default function AccountScreen() {
           <>
             <FlatList
               data={combinedData}
-              renderItem={renderListCard}
+              renderItem={({ item, index }) =>
+                renderListCard({ item, index, total: combinedData.length })
+              }
               keyExtractor={(item) => item.id}
               scrollEnabled={false}
-              contentContainerStyle={{ paddingHorizontal: 16 }}
+              contentContainerStyle={{
+                backgroundColor: "transparent",
+              }}
             />
 
             {/* Create New List Button */}
-            <View style={{ paddingHorizontal: 16 }}>
+            <View>
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() => setShowCreateModal(true)}
                 style={[
                   styles.createListItem,
                   {
-                    backgroundColor: isDarkMode
-                      ? theme.colors.elevation.level1
-                      : theme.colors.surface,
+                    backgroundColor: "transparent",
+                    borderTopWidth:
+                      combinedData.length === 0
+                        ? StyleSheet.hairlineWidth // if no lists at all
+                        : 0,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderColor: theme.colors.outline,
                   },
                 ]}
               >

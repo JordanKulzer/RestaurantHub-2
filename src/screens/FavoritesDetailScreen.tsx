@@ -28,6 +28,14 @@ import QuickActionsMenu from "../components/QuickActionsMenu";
 import RestaurantDetailModal from "../components/RestaurantDetailModal";
 import { getLocationCached } from "../utils/locationHelper";
 import { supabase } from "../utils/supabaseClient";
+import ModernRestaurantCard from "../components/ModernRestaurantCard";
+import {
+  addRestaurantNote,
+  deleteRestaurantNote,
+  getRestaurantNotes,
+  RestaurantNote,
+} from "../utils/notesApi";
+import { getLists } from "../utils/listsApi";
 
 const EARTH_RADIUS_METERS = 6371000;
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -65,6 +73,27 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
   const [hoursVisible, setHoursVisible] = useState(false);
   const [hoursForModal, setHoursForModal] = useState<string[]>([]);
 
+  const [newNoteText, setNewNoteText] = useState<{ [key: string]: string }>({});
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [lists, setLists] = useState([]);
+  const [listsReady, setListsReady] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail(data.user?.email ?? null);
+    });
+  }, []);
+
+  useEffect(() => {
+    async function loadLists() {
+      const data = await getLists();
+      setLists(data);
+      setListsReady(true);
+    }
+
+    loadLists();
+  }, []);
+
   const openHoursModal = (hours: string[]) => {
     setHoursForModal(hours);
     setHoursVisible(true);
@@ -76,6 +105,49 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
   const loadFavorites = async () => {
     const data = await getFavorites();
     setItems(data);
+  };
+
+  const handleAddFavoriteNote = async (restaurantId: string) => {
+    const text = newNoteText[restaurantId]?.trim();
+    if (!text) return;
+
+    try {
+      const newNote = await addRestaurantNote(restaurantId, "favorites", text);
+
+      setItems((prev) =>
+        prev.map((fav) =>
+          fav.id === restaurantId
+            ? { ...fav, notes: [...(fav.notes ?? []), newNote] }
+            : fav
+        )
+      );
+
+      setNewNoteText((prev) => ({ ...prev, [restaurantId]: "" }));
+    } catch (err) {
+      console.error("❌ handleAddFavoriteNote failed:", err);
+    }
+  };
+
+  const handleDeleteFavoriteNote = async (
+    restaurantId: string,
+    noteId: string
+  ) => {
+    try {
+      await deleteRestaurantNote(noteId);
+
+      setItems((prev) =>
+        prev.map((fav) =>
+          fav.id === restaurantId
+            ? {
+                ...fav,
+                notes: fav.notes.filter((n: RestaurantNote) => n.id !== noteId),
+              }
+            : fav
+        )
+      );
+    } catch (err) {
+      console.error("❌ handleDeleteFavoriteNote failed:", err);
+    }
   };
 
   // ----------------------------------------
@@ -153,10 +225,15 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
                 lat,
                 lon,
               },
+              notes: await getRestaurantNotes(fav.id, "favorites"),
             };
           } catch (err) {
             console.warn("❌ enrich failed:", err);
-            return { ...fav, enriched: null };
+            return {
+              ...fav,
+              enriched: null,
+              notes: await getRestaurantNotes(fav.id, "favorites"),
+            };
           }
         })
       );
@@ -237,281 +314,33 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
   // ----------------------------------------
   // Render card
   // ----------------------------------------
-  const renderItem = ({ item }: any) => {
+  const renderItem = ({ item, index }: any) => {
     const e = item.enriched;
-
-    const photo =
-      e?.photos?.[0] ??
-      "https://upload.wikimedia.org/wikipedia/commons/ac/No_image_available.svg";
-
-    const photos = e?.photos?.length ? e.photos : [photo];
+    const isLast = index === items.length - 1;
 
     return (
-      <Card
-        mode="elevated"
-        style={[styles.card, { backgroundColor: theme.colors.surface }]}
-      >
-        {/* Photo Section */}
-        {/* <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => {
-            if (photos.length > 1) {
-              const next = (photoIndex + 1) % photos.length;
-              setPhotoIndex(next);
-            }
-          }}
-          onLongPress={() => e && setSelectedRestaurant(e)}
-        >
-          <Image source={{ uri: photos[photoIndex] }} style={styles.thumb} />
-
-          {photos.length > 1 && (
-            <>
-              <View style={styles.photoIndicator}>
-                <Text style={styles.photoIndicatorText}>
-                  {photoIndex + 1}/{photos.length}
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.hintBadge,
-                  { backgroundColor: theme.colors.secondary + "CC" },
-                ]}
-              >
-                <Text style={styles.hintText}>Tap for more photos</Text>
-              </View>
-            </>
-          )}
-        </TouchableOpacity> */}
-
-        {/* Info Section */}
-        <View style={styles.infoSection}>
-          <View style={styles.rowTop}>
-            <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text
-                numberOfLines={2}
-                style={[styles.name, { color: theme.colors.onSurface }]}
-              >
-                {e?.name}
-              </Text>
-
-              {/* Rating + price + review count */}
-              <View style={styles.metaRow}>
-                {e?.rating != null && (
-                  <Text
-                    style={[styles.metaText, { color: theme.colors.onSurface }]}
-                  >
-                    ⭐ {e.rating.toFixed(1)}
-                  </Text>
-                )}
-
-                {e?.reviewCount != null && (
-                  <Text
-                    style={[
-                      styles.metaText,
-                      { color: theme.colors.onSurface + "99" },
-                    ]}
-                  >
-                    ({e.reviewCount} reviews)
-                  </Text>
-                )}
-
-                {e?.price && (
-                  <Text
-                    style={[
-                      styles.metaText,
-                      { color: theme.colors.onSurface + "99" },
-                    ]}
-                  >
-                    • {e.price}
-                  </Text>
-                )}
-              </View>
-
-              {/* Open/Closed + Hours */}
-              <View style={styles.hoursRow}>
-                {e?.isOpen != null && (
-                  <Text
-                    style={[
-                      styles.metaText,
-                      {
-                        color: e.isOpen
-                          ? theme.colors.primary
-                          : theme.colors.secondary,
-                        fontWeight: "600",
-                      },
-                    ]}
-                  >
-                    {e.isOpen ? "Open now" : "Closed"}
-                  </Text>
-                )}
-
-                {!!e?.hours?.length && (
-                  <TouchableOpacity onPress={() => openHoursModal(e.hours)}>
-                    <Text
-                      style={{
-                        marginLeft: 8,
-                        color: theme.colors.primary,
-                        fontWeight: "600",
-                        textDecorationLine: "underline",
-                        fontSize: 14,
-                      }}
-                    >
-                      View Hours
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Address */}
-              {e?.address && (
-                <Text
-                  style={[
-                    styles.detail,
-                    { color: theme.colors.onSurface + "99" },
-                  ]}
-                >
-                  {e.address}
-                </Text>
-              )}
-
-              {/* Distance */}
-              {e?.distanceMiles != null && (
-                <Text
-                  style={[
-                    styles.detail,
-                    { color: theme.colors.onSurface + "99" },
-                  ]}
-                >
-                  {e.distanceMiles.toFixed(2)} mi away
-                </Text>
-              )}
-            </View>
-
-            {/* Action Menu */}
-            {e && (
-              <QuickActionsMenu
-                restaurant={e}
-                isFavorite={true}
-                onFavoriteChange={loadFavorites}
-                onCreateNewList={() => {}}
-              />
-            )}
-          </View>
-
-          {/* Notes (full width) */}
-          {item.notes && (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => openNoteEditor(item.uuid, item.notes)}
-              style={{
-                width: "100%",
-                marginTop: 14,
-                padding: 14,
-                borderRadius: 14,
-                borderWidth: StyleSheet.hairlineWidth,
-                backgroundColor: theme.dark
-                  ? theme.colors.surface
-                  : theme.colors.background,
-                borderColor: theme.colors.outline,
-                position: "relative",
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 14,
-                  lineHeight: 20,
-                  color:
-                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface,
-                }}
-              >
-                {item.notes}
-              </Text>
-
-              <View style={{ position: "absolute", top: 6, right: 6 }}>
-                <IconButton
-                  icon="pencil"
-                  size={18}
-                  onPress={() => openNoteEditor(item.uuid, item.notes)}
-                  iconColor={
-                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface
-                  }
-                  style={{ margin: 0 }}
-                />
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {/* Add Note (full width) */}
-          {!item.notes && (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => openNoteEditor(item.uuid, null)}
-              style={{
-                width: "100%",
-                marginTop: 14,
-                padding: 14,
-                borderRadius: 14,
-                borderWidth: StyleSheet.hairlineWidth,
-                backgroundColor: theme.dark
-                  ? theme.colors.surface
-                  : theme.colors.background,
-                borderColor: theme.colors.outline,
-                position: "relative",
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 14,
-                  lineHeight: 20,
-                  color:
-                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface,
-                }}
-              >
-                Add Note
-              </Text>
-
-              <View style={{ position: "absolute", top: 6, right: 6 }}>
-                <IconButton
-                  icon="note-plus"
-                  size={18}
-                  onPress={() => openNoteEditor(item.uuid, null)}
-                  iconColor={
-                    theme.colors.onSurfaceVariant ?? theme.colors.onSurface
-                  }
-                  style={{ margin: 0 }}
-                />
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {/* Maps Buttons */}
-          <View style={styles.linkRow}>
-            <Button
-              mode="outlined"
-              icon="google-maps"
-              textColor={theme.colors.primary}
-              style={[styles.linkButton, { borderColor: theme.colors.primary }]}
-              onPress={() => openGoogleMaps(e)}
-            >
-              Google
-            </Button>
-
-            <Button
-              mode="outlined"
-              icon={Platform.OS === "ios" ? "map" : "map-marker"}
-              textColor={theme.colors.tertiary}
-              style={[
-                styles.linkButton,
-                { borderColor: theme.colors.tertiary },
-              ]}
-              onPress={() => openAppleMaps(e)}
-            >
-              Apple
-            </Button>
-          </View>
-        </View>
-      </Card>
+      <ModernRestaurantCard
+        item={item}
+        onPress={() => setSelectedRestaurant(e)}
+        notes={item.notes ?? []}
+        userRole="editor"
+        onAddNote={(restaurantId) => handleAddFavoriteNote(restaurantId)}
+        onDeleteNote={(restaurantId, noteId) =>
+          handleDeleteFavoriteNote(restaurantId, noteId)
+        }
+        newNoteText={newNoteText}
+        setNewNoteText={setNewNoteText}
+        showActions={true}
+        isFavorite={true}
+        isLast={isLast}
+        onActionRemove={(restaurantId) =>
+          setItems((prev) => prev.filter((x) => x.id !== restaurantId))
+        }
+        preloadedLists={lists}
+        listsReady={listsReady}
+        onGoogleMaps={() => openGoogleMaps(e)}
+        onAppleMaps={() => openAppleMaps(e)}
+      />
     );
   };
 
@@ -568,7 +397,7 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
           data={items}
           renderItem={renderItem}
           keyExtractor={(i) => i.id}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
         />
       )}
       {/* Full Detail Modal */}
@@ -614,71 +443,6 @@ export default function FavoritesDetailScreen({ route, navigation }: any) {
             style={{ marginTop: 12 }}
           >
             Close
-          </Button>
-        </Modal>
-      </Portal>
-      <Portal>
-        <Modal
-          visible={!!editingNoteForId}
-          onDismiss={() => {
-            setEditingNoteForId(null);
-            setNoteText("");
-          }}
-          contentContainerStyle={{
-            backgroundColor: theme.colors.surface,
-            padding: 24,
-            marginHorizontal: 16,
-            borderRadius: 22,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 21,
-              fontWeight: "700",
-              marginBottom: 18,
-              color: theme.colors.onSurface,
-            }}
-          >
-            Favorite Note
-          </Text>
-
-          <TextInput
-            label="Add your notes"
-            value={noteText}
-            onChangeText={setNoteText}
-            multiline
-            mode="outlined"
-            numberOfLines={4}
-            style={{ marginBottom: 24 }}
-          />
-
-          <Button
-            mode="contained"
-            textColor={theme.colors.surface}
-            style={{
-              backgroundColor: theme.colors.tertiary,
-              borderRadius: 12,
-              paddingVertical: 6,
-              marginBottom: 10,
-            }}
-            onPress={() => {
-              if (editingNoteForId) {
-                handleSaveNote(editingNoteForId, noteText);
-              }
-            }}
-          >
-            Save Note
-          </Button>
-
-          <Button
-            mode="text"
-            textColor={theme.colors.onSurface}
-            onPress={() => {
-              setEditingNoteForId(null);
-              setNoteText("");
-            }}
-          >
-            Cancel
           </Button>
         </Modal>
       </Portal>
@@ -790,7 +554,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: "700",
-    textAlign: "center",
     flex: 1,
   },
 

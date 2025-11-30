@@ -57,12 +57,9 @@ export default function HomeScreen() {
   const [showDetails, setShowDetails] = useState(false);
   const [selectedRestaurant, setSelectedRestaurant] = useState<any>(null);
   const [liked, setLiked] = useState<HomeRestaurant[]>([]);
-
-  const [showChips, setShowChips] = useState(false);
   const [activeModal, setActiveModal] = useState<
     "category" | "rating" | "distance" | null
   >(null);
-  const [addToListModalVisible, setAddToListModalVisible] = useState(false);
 
   // Active filters (currently applied)
   const [filters, setFilters] = useState<string[]>([]);
@@ -100,7 +97,7 @@ export default function HomeScreen() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
 
-  // ✅ Preload lists data for QuickActionsMenu
+  // Preload lists data for QuickActionsMenu
   const [listsCache, setListsCache] = useState<any[]>([]);
   const [listsLoaded, setListsLoaded] = useState(false);
 
@@ -113,13 +110,7 @@ export default function HomeScreen() {
 
   const isFocused = useIsFocused();
 
-  // ✅ Preload lists when screen is focused
-  useEffect(() => {
-    if (isFocused) {
-      preloadLists();
-    }
-  }, [isFocused]);
-
+  // Define preloadLists before using it
   const preloadLists = async () => {
     try {
       const data = await getLists();
@@ -127,8 +118,16 @@ export default function HomeScreen() {
       setListsLoaded(true);
     } catch (e) {
       console.error("❌ Failed to preload lists:", e);
+      setListsLoaded(true);
     }
   };
+
+  // Preload lists when screen is focused
+  useEffect(() => {
+    if (isFocused) {
+      preloadLists();
+    }
+  }, [isFocused]);
 
   // Check and reset daily swipe count
   useEffect(() => {
@@ -164,13 +163,13 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const init = async () => {
+      await preloadLists();
       await loadRestaurants();
       const saved = await AsyncStorage.getItem("likedRestaurants");
       if (saved) setLiked(JSON.parse(saved));
     };
     init();
 
-    // Initialize pending states to match actual filters
     setPendingFilters([...filters]);
     setPendingRatingFilter(ratingFilter);
     setPendingDistanceFilter(distanceFilter);
@@ -188,6 +187,7 @@ export default function HomeScreen() {
   };
 
   const handleLike = (restaurant: HomeRestaurant) => {
+    incrementSwipeCount();
     setLiked((prev) => {
       if (prev.some((x) => x.id === restaurant.id)) return prev;
       return [...prev, restaurant];
@@ -690,6 +690,15 @@ export default function HomeScreen() {
               "Location",
               "Distance",
             ].map((label) => {
+              // Check if this filter is locked for non-premium users
+              const isLockedFilter =
+                !isPremium &&
+                (label === "Clear Filters" ||
+                  label === "Category" ||
+                  label === "Rating" ||
+                  label === "Distance" ||
+                  label === "Location");
+
               const isActive =
                 (label === "Category" && filters.length > 0) ||
                 (label === "Rating" && ratingFilter !== "all") ||
@@ -708,9 +717,17 @@ export default function HomeScreen() {
                   ? theme.colors.error || "#b00020"
                   : isActive
                   ? "#fff"
+                  : isLockedFilter
+                  ? theme.colors.onSurface + "66" // Dimmed for locked
                   : theme.colors.tertiary;
 
               const handlePress = async () => {
+                // If locked, show upgrade modal
+                if (isLockedFilter) {
+                  setShowUpgradeModal(true);
+                  return;
+                }
+
                 if (label === "Clear Filters") {
                   clearAllFilters();
                   return;
@@ -742,12 +759,16 @@ export default function HomeScreen() {
                 <Chip
                   key={label}
                   mode="outlined"
+                  icon={isLockedFilter ? "lock" : undefined}
                   style={[
                     styles.chip,
                     {
-                      borderColor: theme.colors.tertiary,
+                      borderColor: isLockedFilter
+                        ? theme.colors.onSurface + "33"
+                        : theme.colors.tertiary,
                       backgroundColor,
                       marginRight: 8,
+                      opacity: isLockedFilter ? 0.7 : 1,
                     },
                   ]}
                   textStyle={{
@@ -817,6 +838,10 @@ export default function HomeScreen() {
               <Button
                 mode="outlined"
                 onPress={() => {
+                  if (!isPremium) {
+                    setShowUpgradeModal(true);
+                    return;
+                  }
                   setPendingDistanceFilter(distanceFilter);
                   setActiveModal("distance");
                 }}
@@ -882,7 +907,6 @@ export default function HomeScreen() {
                   );
                 }}
                 onSwiped={(index) => {
-                  incrementSwipeCount();
                   setCurrentRestaurant(restaurants[index + 1] ?? null);
                   setCurrentCardIndex(index + 1);
                 }}
@@ -897,7 +921,7 @@ export default function HomeScreen() {
                 onSwipedAborted={() =>
                   setCurrentRestaurant(restaurants[currentCardIndex])
                 }
-                disableLeftSwipe={!isPremium && swipesRemaining === 0}
+                // disableLeftSwipe={!isPremium && swipesRemaining === 0}
                 disableRightSwipe={!isPremium && swipesRemaining === 0}
                 backgroundColor="transparent"
                 stackSize={2}

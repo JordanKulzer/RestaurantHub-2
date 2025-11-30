@@ -26,14 +26,44 @@ import { HomeRestaurant } from "../types/homeRestaurant";
 import { HomeSkeleton, QuickActionsMenu } from "../components";
 import { getFavorites } from "../utils/favoritesApis";
 import Toast from "react-native-toast-message";
+import ModernRestaurantCard from "../components/ModernRestaurantCard";
+import {
+  addRestaurantNote,
+  deleteRestaurantNote,
+  getRestaurantNotes,
+  RestaurantNote,
+} from "../utils/notesApi";
+import { getLists } from "../utils/listsApi";
 
 export default function WinnersDetailScreen({ navigation, route }: any) {
   const theme = useTheme();
   const isFocused = useIsFocused();
   const [winners, setWinners] = useState<WinnerEntry[]>([]);
-  const [enrichedWinners, setEnrichedWinners] = useState<HomeRestaurant[]>([]);
+  const [enrichedWinners, setEnrichedWinners] = useState<
+    (HomeRestaurant & { notes?: RestaurantNote[] })[]
+  >([]);
+  const [newNoteText, setNewNoteText] = useState<{
+    [restaurantId: string]: string;
+  }>({});
+
   const [loading, setLoading] = useState(true);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [lists, setLists] = useState<any[]>([]);
+  const [listsReady, setListsReady] = useState(false);
+
+  useEffect(() => {
+    async function loadLists() {
+      const data = await getLists();
+      setLists(data);
+      setListsReady(true);
+    }
+    loadLists();
+  }, []);
+
+  const refreshFavorites = async () => {
+    const favs = await getFavorites();
+    setFavoriteIds(new Set(favs.map((f) => f.id)));
+  };
 
   const loadWinners = async () => {
     try {
@@ -41,11 +71,14 @@ export default function WinnersDetailScreen({ navigation, route }: any) {
       const data = await getWinners();
       setWinners(data);
 
-      // Enrich with details from Google Places API
       const enriched = await Promise.all(
         data.map(async (winner) => {
           try {
             const details = await fetchRestaurantDetails(winner.id);
+
+            // Fetch notes for this restaurant in the 'winners' context
+            const notes = await getRestaurantNotes(winner.id, "winners");
+
             return {
               id: winner.id,
               source: winner.source,
@@ -62,9 +95,12 @@ export default function WinnersDetailScreen({ navigation, route }: any) {
                 details?.photos && details.photos.length > 0
                   ? details.photos[0]
                   : null,
-            } as HomeRestaurant;
+              notes, // ⬅️ attach notes array here
+            } as HomeRestaurant & { notes?: RestaurantNote[] };
           } catch (err) {
             console.error("Error fetching winner details:", err);
+            const notes = await getRestaurantNotes(winner.id, "winners");
+
             return {
               id: winner.id,
               source: winner.source,
@@ -78,18 +114,24 @@ export default function WinnersDetailScreen({ navigation, route }: any) {
               hours: [],
               isOpen: null,
               image: null,
-            } as HomeRestaurant;
+              notes,
+            } as HomeRestaurant & { notes?: RestaurantNote[] };
           }
         })
       );
 
       setEnrichedWinners(enriched);
+      refreshFavorites();
     } catch (error) {
       console.error("Error loading winners:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isFocused) loadWinners();
+  }, [isFocused]);
 
   const refreshFavoriteIds = async () => {
     try {
@@ -100,27 +142,55 @@ export default function WinnersDetailScreen({ navigation, route }: any) {
     }
   };
 
-  useEffect(() => {
-    if (isFocused) {
-      loadWinners();
-      refreshFavoriteIds();
-    }
-  }, [isFocused]);
+  const handleAddWinnerNote = async (restaurantId: string) => {
+    const text = newNoteText[restaurantId]?.trim();
+    if (!text) return;
 
-  const handleRemove = async (id: string) => {
     try {
-      await removeWinner(id);
-      Toast.show({
-        type: "success",
-        text1: "Removed",
-        text2: "Winner removed from your list",
-      });
-      loadWinners();
-    } catch (error) {
+      const note = await addRestaurantNote(restaurantId, "winners", text);
+
+      setEnrichedWinners((prev) =>
+        prev.map((w) =>
+          w.id === restaurantId
+            ? { ...w, notes: [...(w.notes ?? []), note] }
+            : w
+        )
+      );
+
+      setNewNoteText((prev) => ({ ...prev, [restaurantId]: "" }));
+    } catch (err) {
+      console.error("❌ handleAddWinnerNote failed:", err);
       Toast.show({
         type: "error",
         text1: "Error",
-        text2: "Failed to remove winner",
+        text2: "Unable to save note",
+      });
+    }
+  };
+
+  const handleDeleteWinnerNote = async (
+    restaurantId: string,
+    noteId: string
+  ) => {
+    try {
+      await deleteRestaurantNote(noteId);
+
+      setEnrichedWinners((prev) =>
+        prev.map((w) =>
+          w.id === restaurantId
+            ? {
+                ...w,
+                notes: (w.notes ?? []).filter((n) => n.id !== noteId),
+              }
+            : w
+        )
+      );
+    } catch (err) {
+      console.error("❌ handleDeleteWinnerNote failed:", err);
+      Toast.show({
+        type: "error",
+        text1: "Error",
+        text2: "Unable to delete note",
       });
     }
   };
@@ -211,18 +281,12 @@ export default function WinnersDetailScreen({ navigation, route }: any) {
           iconColor={theme.colors.onBackground}
           onPress={() => navigation.goBack()}
         />
-        <View style={{ flex: 1 }}>
+        <View style={styles.headerRow}>
           <Text
             variant="headlineSmall"
             style={[styles.headerTitle, { color: theme.colors.onBackground }]}
           >
             Previous Winners
-          </Text>
-          <Text
-            variant="bodySmall"
-            style={{ color: theme.colors.onSurfaceVariant }}
-          >
-            {winners.length} {winners.length === 1 ? "winner" : "winners"}
           </Text>
         </View>
       </View>
@@ -241,129 +305,37 @@ export default function WinnersDetailScreen({ navigation, route }: any) {
           renderItem={({ item, index }) => {
             const winner = winners[index];
             const isFavorite = favoriteIds.has(item.id);
+            const notes = item.notes ?? [];
+            const isLast = index === enrichedWinners.length - 1;
 
             return (
-              <Card
-                mode="elevated"
-                style={[styles.card, { backgroundColor: theme.colors.surface }]}
-              >
-                <View style={{ position: "relative" }}>
-                  {item.image ? (
-                    <Card.Cover
-                      source={{ uri: item.image }}
-                      style={styles.cardImage}
-                    />
-                  ) : (
-                    <Card.Cover
-                      source={{
-                        uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png",
-                      }}
-                      style={styles.cardImage}
-                    />
-                  )}
-
-                  <LinearGradient
-                    colors={["transparent", "rgba(0,0,0,0.6)"]}
-                    style={StyleSheet.absoluteFillObject}
-                  />
-
-                  {/* Quick Actions Menu */}
-                  <View style={styles.menuContainer}>
-                    <QuickActionsMenu
-                      restaurant={item}
-                      isFavorite={isFavorite}
-                      onFavoriteChange={refreshFavoriteIds}
-                      onCreateNewList={() => {}}
-                      preloadedLists={[]}
-                      listsReady={false}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.cardContent}>
-                  {/* Trophy badge */}
-                  <View style={styles.trophyBadge}>
-                    <MaterialCommunityIcons
-                      name="trophy"
-                      size={16}
-                      color={theme.colors.secondary}
-                    />
-                    <Text
-                      style={[
-                        styles.wonText,
-                        { color: theme.colors.onSurfaceVariant },
-                      ]}
-                    >
-                      Won {formatDate(winner.wonAt)}
-                      {winner.category &&
-                        ` ${getCategoryDisplay(winner.category)}`}
-                    </Text>
-                  </View>
-
-                  <Text
-                    style={[styles.name, { color: theme.colors.onSurface }]}
-                  >
-                    {item.name}
-                  </Text>
-
-                  {/* Rating */}
-                  {item.rating && item.rating > 0 && (
-                    <Text
-                      style={[styles.rating, { color: theme.colors.onSurface }]}
-                    >
-                      ⭐ {item.rating.toFixed(1)}
-                    </Text>
-                  )}
-
-                  {/* Address */}
-                  {item.address && (
-                    <Text
-                      style={[
-                        styles.address,
-                        { color: theme.colors.onSurfaceVariant },
-                      ]}
-                    >
-                      {item.address}
-                    </Text>
-                  )}
-
-                  {/* Action Buttons */}
-                  <View style={styles.actions}>
-                    <Button
-                      mode="outlined"
-                      icon="google-maps"
-                      textColor={theme.colors.primary}
-                      style={[
-                        styles.actionButton,
-                        { borderColor: theme.colors.primary },
-                      ]}
-                      onPress={() => openGoogleMaps(item)}
-                    >
-                      Google
-                    </Button>
-
-                    <Button
-                      mode="outlined"
-                      icon={Platform.OS === "ios" ? "map" : "map-marker"}
-                      textColor={theme.colors.tertiary}
-                      style={[
-                        styles.actionButton,
-                        { borderColor: theme.colors.tertiary },
-                      ]}
-                      onPress={() => openAppleMaps(item)}
-                    >
-                      Apple
-                    </Button>
-
-                    <IconButton
-                      icon="delete-outline"
-                      iconColor={theme.colors.error}
-                      size={20}
-                      onPress={() => handleRemove(item.id)}
-                    />
-                  </View>
-                </View>
-              </Card>
+              <ModernRestaurantCard
+                item={item}
+                onPress={() => {}}
+                notes={notes}
+                userRole="editor"
+                onAddNote={handleAddWinnerNote}
+                onDeleteNote={handleDeleteWinnerNote}
+                newNoteText={newNoteText}
+                setNewNoteText={setNewNoteText}
+                showActions={true}
+                isFavorite={isFavorite}
+                isWinner={true}
+                isLast={isLast}
+                onRemoveWinner={(id) => {
+                  removeWinner(id);
+                  setEnrichedWinners((prev) => prev.filter((w) => w.id !== id));
+                }}
+                preloadedLists={lists}
+                listsReady={listsReady}
+                onActionRemove={(restaurantId) =>
+                  setEnrichedWinners((prev) =>
+                    prev.filter((x) => x.id !== restaurantId)
+                  )
+                }
+                onGoogleMaps={() => openGoogleMaps(item)}
+                onAppleMaps={() => openAppleMaps(item)}
+              />
             );
           }}
           ListEmptyComponent={
@@ -404,8 +376,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingBottom: 8,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    justifyContent: "space-between",
+  },
+
   headerTitle: {
+    fontSize: 20,
     fontWeight: "700",
+    flex: 1,
   },
   card: {
     marginHorizontal: 16,

@@ -18,10 +18,17 @@ import { supabase } from "../utils/supabaseClient";
 interface Props {
   restaurant: any;
   isFavorite: boolean;
+
+  /** New props */
+  isWinner?: boolean;
+  onRemoveWinner?: (restaurantId: string) => void;
+  iconColor?: string;
+
   onFavoriteChange?: () => void;
   onCreateNewList: (onCreated: (newList: any) => void) => void;
-  preloadedLists?: any[]; // ✅ Accept preloaded lists from parent
-  listsReady?: boolean; // ✅ Flag to indicate lists are ready
+
+  preloadedLists?: any[];
+  listsReady?: boolean;
 }
 
 type ListRow = {
@@ -44,6 +51,12 @@ export default function QuickActionsMenu({
   isFavorite,
   onFavoriteChange,
   onCreateNewList,
+
+  /** NEW */
+  isWinner = false,
+  onRemoveWinner,
+  iconColor = "#fff",
+
   preloadedLists = [],
   listsReady = false,
 }: Props) {
@@ -52,6 +65,7 @@ export default function QuickActionsMenu({
   const [lists, setLists] = useState<ListRow[]>(preloadedLists);
   const [memberships, setMemberships] = useState<MembershipMap>({});
   const [loadingLists, setLoadingLists] = useState(!listsReady);
+
   const buttonRef = useRef<View>(null);
   const [anchorPosition, setAnchorPosition] = useState({ x: 0, y: 0 });
 
@@ -81,22 +95,17 @@ export default function QuickActionsMenu({
       setVisible(true);
     }
   };
+
   const closeMenu = () => setVisible(false);
 
   const loadMemberships = async () => {
     try {
       const pointer = toPointer(restaurant);
 
-      const { data: listItems, error } = await supabase
+      const { data: listItems } = await supabase
         .from("list_items")
         .select("id, list_id")
         .eq("restaurant_id", pointer.id);
-
-      if (error) {
-        console.error("❌ list_items membership query failed:", error);
-        setMemberships({});
-        return;
-      }
 
       const map: MembershipMap = {};
       (listItems ?? []).forEach((row: any) => {
@@ -105,6 +114,7 @@ export default function QuickActionsMenu({
       setMemberships(map);
     } catch (e) {
       console.error("❌ memberships query failed:", e);
+      setMemberships({});
     }
   };
 
@@ -112,9 +122,7 @@ export default function QuickActionsMenu({
     closeMenu();
     try {
       await Share.share({
-        message: `Check out ${restaurant.name}! ${
-          restaurant.address ? restaurant.address : ""
-        }`,
+        message: `Check out ${restaurant.name}! ${restaurant.address ?? ""}`,
       });
     } catch (error) {
       console.error("❌ Share failed:", error);
@@ -124,11 +132,9 @@ export default function QuickActionsMenu({
   const handleToggleFavorite = async () => {
     try {
       const pointer = toPointer(restaurant);
-      if (isFavorite) {
-        await removeFavorite(pointer.id);
-      } else {
-        await addFavorite(pointer);
-      }
+      if (isFavorite) await removeFavorite(pointer.id);
+      else await addFavorite(pointer);
+
       onFavoriteChange?.();
     } catch (e) {
       console.error("❌ favorite toggle failed:", e);
@@ -141,7 +147,6 @@ export default function QuickActionsMenu({
 
     try {
       if (membership) {
-        // Already in this list → remove
         await removeFromList(membership.itemId);
         setMemberships((prev) => {
           const copy = { ...prev };
@@ -149,7 +154,6 @@ export default function QuickActionsMenu({
           return copy;
         });
       } else {
-        // Not in this list → add
         const inserted = await addToList(listId, pointer);
         setMemberships((prev) => ({
           ...prev,
@@ -174,7 +178,7 @@ export default function QuickActionsMenu({
           [newList.id]: { itemId: inserted.id },
         }));
       } catch (e) {
-        console.error("❌ addToList (new list) failed:", e);
+        console.error("❌ addToList(new) failed:", e);
       }
     });
   };
@@ -189,7 +193,7 @@ export default function QuickActionsMenu({
         <IconButton
           icon="plus-circle-outline"
           size={26}
-          iconColor="#fff"
+          iconColor={iconColor} // <--- NEW OVERRIDE
           onPress={openMenu}
           style={{
             borderRadius: 50,
@@ -200,99 +204,84 @@ export default function QuickActionsMenu({
           }}
         />
       </View>
+
       <Portal>
         <Menu
-          key={visible ? "open" : "closed"}
           visible={visible}
           onDismiss={closeMenu}
           anchor={anchorPosition}
+          anchorPosition="bottom"
           contentStyle={{
             backgroundColor: theme.colors.surface,
             borderRadius: 16,
             paddingVertical: 4,
-            shadowColor: "#000",
-            shadowOpacity: 0.12,
-            shadowRadius: 6,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: 5,
             width: 240,
+            elevation: 5,
           }}
-          anchorPosition="bottom"
         >
-          {/* Section Header */}
+          {/* QUICK ACTIONS HEADER */}
           <View style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
             <Text
               style={{
                 color: theme.colors.tertiary,
-                fontWeight: "600",
                 fontSize: 13,
+                fontWeight: "600",
               }}
             >
               Quick Actions
             </Text>
           </View>
 
-          {/* ❤️ Favorites */}
+          {/* FAVORITES */}
           <Menu.Item
             onPress={handleToggleFavorite}
             title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
             leadingIcon={() =>
               renderIcon(
                 isFavorite ? "heart" : "heart-outline",
-                theme.colors.tertiary
+                isFavorite ? theme.colors.secondary : theme.colors.tertiary
               )
             }
-            titleStyle={{ color: theme.colors.tertiary }}
-            rippleColor={theme.colors.tertiary + "22"}
-          />
-
-          <Divider
-            style={{
-              backgroundColor: theme.colors.outlineVariant,
-              opacity: 0.5,
+            titleStyle={{
+              color: isFavorite
+                ? theme.colors.secondary
+                : theme.colors.tertiary,
             }}
           />
 
-          {/* ➕ Create New List */}
+          <Divider />
+
+          {/* CREATE NEW LIST
           <Menu.Item
             onPress={handleCreateNewList}
             title="Create New List"
             leadingIcon={() => renderIcon("plus", theme.colors.tertiary)}
             titleStyle={{ color: theme.colors.tertiary }}
-            rippleColor={theme.colors.tertiary + "22"}
-          />
+          /> */}
 
-          {/* 🗂️ User Lists */}
-          {lists.length > 0 ? (
+          {/* USER LISTS */}
+          {lists.length > 0 && (
             <>
-              <Divider
-                style={{
-                  backgroundColor: theme.colors.outlineVariant,
-                  opacity: 0.5,
-                }}
-              />
+              <Divider />
               <View style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
                 <Text
                   style={{
                     color: theme.colors.tertiary,
-                    fontWeight: "600",
                     fontSize: 13,
+                    fontWeight: "600",
                   }}
                 >
                   Your Lists
                 </Text>
               </View>
+              <Menu.Item
+                onPress={handleCreateNewList}
+                title="Create New List"
+                leadingIcon={() => renderIcon("plus", theme.colors.tertiary)}
+                titleStyle={{ color: theme.colors.tertiary }}
+              />
 
-              {loadingLists ? (
-                <Menu.Item
-                  title="Loading lists…"
-                  disabled
-                  titleStyle={{ color: theme.colors.onSurfaceVariant }}
-                  leadingIcon={() =>
-                    renderIcon("clock-outline", theme.colors.tertiary)
-                  }
-                />
-              ) : (
+              {!loadingLists &&
                 lists.map((l) => {
                   const membership = memberships[l.id];
                   const isInList = !!membership;
@@ -314,36 +303,51 @@ export default function QuickActionsMenu({
                             : theme.colors.tertiary
                         )
                       }
-                      titleStyle={
-                        isInList
-                          ? { color: theme.colors.secondary }
-                          : { color: theme.colors.tertiary }
-                      }
-                      rippleColor={theme.colors.tertiary + "22"}
+                      titleStyle={{
+                        color: isInList
+                          ? theme.colors.secondary
+                          : theme.colors.tertiary,
+                      }}
                     />
                   );
-                })
-              )}
+                })}
             </>
-          ) : (
-            <Menu.Item
-              title="No lists available"
-              disabled
-              titleStyle={{ color: theme.colors.tertiary + "88" }}
-              leadingIcon={() =>
-                renderIcon("alert-circle-outline", theme.colors.tertiary)
-              }
-            />
           )}
 
-          <Divider
-            style={{
-              backgroundColor: theme.colors.outlineVariant,
-              opacity: 0.5,
-            }}
-          />
+          <Divider />
 
-          {/* 📤 Share */}
+          {/* WINNER SECTION (NEW) */}
+          {isWinner && (
+            <>
+              <View style={{ paddingHorizontal: 16, paddingVertical: 6 }}>
+                <Text
+                  style={{
+                    color: theme.colors.tertiary,
+                    fontSize: 13,
+                    fontWeight: "600",
+                  }}
+                >
+                  Winner Actions
+                </Text>
+              </View>
+
+              <Menu.Item
+                onPress={() => {
+                  closeMenu();
+                  onRemoveWinner?.(restaurant.id);
+                }}
+                title="Remove Winner"
+                leadingIcon={() =>
+                  renderIcon("trophy-outline", theme.colors.secondary)
+                }
+                titleStyle={{ color: theme.colors.secondary }}
+              />
+
+              <Divider />
+            </>
+          )}
+
+          {/* SHARE */}
           <Menu.Item
             onPress={handleShare}
             title="Share"
@@ -351,7 +355,6 @@ export default function QuickActionsMenu({
               renderIcon("share-variant", theme.colors.tertiary)
             }
             titleStyle={{ color: theme.colors.tertiary }}
-            rippleColor={theme.colors.tertiary + "22"}
           />
         </Menu>
       </Portal>

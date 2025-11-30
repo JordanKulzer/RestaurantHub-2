@@ -10,6 +10,7 @@ import {
   Linking,
   Animated,
   ScrollView,
+  Image,
 } from "react-native";
 import {
   Button,
@@ -63,7 +64,8 @@ type ShuffleSource =
   | null;
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
-const CARD_PHOTO_HEIGHT = SCREEN_HEIGHT * 0.32;
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const CARD_PHOTO_HEIGHT = 280;
 
 const FREE_DAILY_SHUFFLES = 10;
 
@@ -170,6 +172,10 @@ export default function ShuffleScreen() {
   const [showWinnerModal, setShowWinnerModal] = useState(false);
   const [winner, setWinner] = useState<HomeRestaurant | null>(null);
 
+  // Preload lists data for QuickActionsMenu
+  const [listsCache, setListsCache] = useState<any[]>([]);
+  const [listsLoaded, setListsLoaded] = useState(false);
+
   const accent = theme.colors.tertiary;
   const surface = theme.colors.surface;
 
@@ -202,6 +208,18 @@ export default function ShuffleScreen() {
 
   const resetAnimatedValues = () => {
     animatedValues.clear();
+  };
+
+  // Define preloadLists before using it
+  const preloadLists = async () => {
+    try {
+      const data = await getLists();
+      setListsCache(data);
+      setListsLoaded(true);
+    } catch (e) {
+      console.error("❌ Failed to preload lists:", e);
+      setListsLoaded(true);
+    }
   };
 
   // Check if there are pending filter changes
@@ -258,6 +276,12 @@ export default function ShuffleScreen() {
     };
     request();
   }, []);
+
+  useEffect(() => {
+    if (isFocused) {
+      preloadLists();
+    }
+  }, [isFocused]);
 
   useEffect(() => {
     const loadLists = async () => {
@@ -424,14 +448,46 @@ export default function ShuffleScreen() {
     }
   };
 
+  const calculateDistance = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ): number => {
+    const R = 3959; // Earth's radius in miles
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
   const mapGoogleDetailsToRestaurant = (
     details: any,
-    fallback?: Partial<HomeRestaurant>
+    fallback?: Partial<HomeRestaurant>,
+    userLocation?: { lat: number; lon: number }
   ): HomeRestaurant => {
     const primaryImage =
       Array.isArray(details?.photos) && details.photos.length > 0
         ? details.photos[0]
         : (fallback as any)?.image ?? (fallback as any)?.photo ?? null;
+
+    let distanceMiles = null;
+    if (userLocation && details?.geometry?.location) {
+      distanceMiles = calculateDistance(
+        userLocation.lat,
+        userLocation.lon,
+        details.geometry.location.lat,
+        details.geometry.location.lng
+      );
+    } else if (typeof fallback?.distanceMiles === "number") {
+      distanceMiles = fallback.distanceMiles;
+    }
 
     return {
       id: details?.id ?? fallback?.id ?? "",
@@ -446,10 +502,7 @@ export default function ShuffleScreen() {
         typeof details?.rating === "number"
           ? details.rating
           : fallback?.rating ?? 0,
-      distanceMiles:
-        typeof fallback?.distanceMiles === "number"
-          ? fallback.distanceMiles
-          : null,
+      distanceMiles,
       googleUrl: details?.googleUrl ?? details?.url ?? null,
       photos: Array.isArray(details?.photos) ? details.photos : [],
       hours: details?.hours ?? [],
@@ -542,12 +595,16 @@ export default function ShuffleScreen() {
       rows.map(async (row) => {
         try {
           const details = await fetchRestaurantDetails(row.restaurant_id);
-          return mapGoogleDetailsToRestaurant(details, {
-            id: row.restaurant_id,
-            name: row.restaurant_name,
-            address: row.restaurant_address,
-            source: "google",
-          } as Partial<HomeRestaurant>);
+          return mapGoogleDetailsToRestaurant(
+            details,
+            {
+              id: row.restaurant_id,
+              name: row.restaurant_name,
+              address: row.restaurant_address,
+              source: "google",
+            },
+            location ?? undefined // ✅ Pass user location
+          );
         } catch (err) {
           console.error("Google details failed for list item:", err);
           return {
@@ -592,12 +649,16 @@ export default function ShuffleScreen() {
           favPointers.map(async (ptr: RestaurantPointer) => {
             try {
               const details = await fetchRestaurantDetails(ptr.id);
-              return mapGoogleDetailsToRestaurant(details, {
-                id: ptr.id,
-                name: ptr.name,
-                address: ptr.address ?? "",
-                source: ptr.source,
-              });
+              return mapGoogleDetailsToRestaurant(
+                details,
+                {
+                  id: ptr.id,
+                  name: ptr.name,
+                  address: ptr.address ?? "",
+                  source: ptr.source,
+                },
+                location ?? undefined
+              );
             } catch (err) {
               console.error("Details failed for favorite:", err);
               return {
@@ -1005,6 +1066,32 @@ export default function ShuffleScreen() {
     </View>
   );
 
+  const renderListHeader = () => {
+    if (restaurants.length === 0) return null;
+
+    return (
+      <View
+        style={{
+          paddingHorizontal: 20,
+          paddingBottom: 16,
+          backgroundColor: theme.colors.background,
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 14,
+            color: theme.colors.onSurface + "99",
+            textAlign: "center",
+            lineHeight: 20,
+          }}
+        >
+          Tap "Eliminate" to remove restaurants one by one. The last one
+          standing is your winner!
+        </Text>
+      </View>
+    );
+  };
+
   const safeSubtitle = (item: HomeRestaurant) => {
     const ratingText =
       typeof item.rating === "number" ? item.rating.toFixed(1) : "N/A";
@@ -1032,13 +1119,14 @@ export default function ShuffleScreen() {
 
       {phase === "choose-source" && shuffleSource === null && (
         <ScrollView style={{ flex: 1 }}>
-          <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
+          <View style={{ marginTop: 16 }}>
             <Text
               style={{
                 fontSize: 22,
                 fontWeight: "700",
                 marginBottom: 6,
                 color: theme.colors.tertiary,
+                paddingHorizontal: 20,
               }}
             >
               Shuffler
@@ -1155,14 +1243,28 @@ export default function ShuffleScreen() {
                 </View>
               </Surface>
             )}
+            <Text
+              style={{
+                fontSize: 14,
+                color: theme.colors.onSurface + "99",
+                marginTop: 16,
+                paddingHorizontal: 20,
+              }}
+            >
+              {collaborativeMode
+                ? "Choose options together, then shuffle to find your winner!"
+                : "Pick your category, then eliminate restaurants one by one to find your winner!"}
+            </Text>
             {/* Session Selector - Only show when NOT in collaborative mode */}
             {!collaborativeMode && (
-              <ShuffleSessionSelector
-                onStartCollaborative={handleStartCollaborative}
-                onJoinSession={handleJoinCollaborative}
-              />
+              <View style={{ paddingHorizontal: 20 }}>
+                <ShuffleSessionSelector
+                  onStartCollaborative={handleStartCollaborative}
+                  onJoinSession={handleJoinCollaborative}
+                />
+              </View>
             )}
-            <Text
+            {/* <Text
               style={{
                 fontSize: 14,
                 color: theme.colors.onSurface + "99",
@@ -1172,7 +1274,7 @@ export default function ShuffleScreen() {
               {collaborativeMode
                 ? "Choose options together, then shuffle to find your winner!"
                 : "Pick your category, then eliminate restaurants one by one to find your winner!"}
-            </Text>
+            </Text> */}
             {/* FAVORITES */}
             <TouchableOpacity
               activeOpacity={0.7}
@@ -1180,7 +1282,7 @@ export default function ShuffleScreen() {
               style={[
                 styles.sourceCard,
                 {
-                  backgroundColor: theme.colors.surface,
+                  backgroundColor: "transparent",
                   borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
@@ -1190,6 +1292,7 @@ export default function ShuffleScreen() {
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  paddingHorizontal: 20,
                 }}
               >
                 {/* Left - Icon */}
@@ -1233,7 +1336,7 @@ export default function ShuffleScreen() {
               </View>
 
               {favoritesExpanded && (
-                <View style={{ marginTop: 16 }}>
+                <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
                   <Text
                     style={{
                       fontSize: 14,
@@ -1274,7 +1377,7 @@ export default function ShuffleScreen() {
               style={[
                 styles.sourceCard,
                 {
-                  backgroundColor: theme.colors.surface,
+                  backgroundColor: "transparent",
                   borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
@@ -1284,6 +1387,7 @@ export default function ShuffleScreen() {
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  paddingHorizontal: 20,
                 }}
               >
                 {/* Left - Icon */}
@@ -1327,7 +1431,7 @@ export default function ShuffleScreen() {
               </View>
 
               {likedExpanded && (
-                <View style={{ marginTop: 16 }}>
+                <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
                   <Text
                     style={{
                       fontSize: 14,
@@ -1367,7 +1471,7 @@ export default function ShuffleScreen() {
               style={[
                 styles.sourceCard,
                 {
-                  backgroundColor: theme.colors.surface,
+                  backgroundColor: "transparent",
                   borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
@@ -1377,6 +1481,7 @@ export default function ShuffleScreen() {
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  paddingHorizontal: 20,
                 }}
               >
                 {/* Left - Icon */}
@@ -1420,7 +1525,7 @@ export default function ShuffleScreen() {
               </View>
 
               {listsExpanded && (
-                <View style={{ marginTop: 16 }}>
+                <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
                   <Text
                     style={{
                       fontSize: 14,
@@ -1597,7 +1702,7 @@ export default function ShuffleScreen() {
               style={[
                 styles.sourceCard,
                 {
-                  backgroundColor: theme.colors.surface,
+                  backgroundColor: "transparent",
                   borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
@@ -1607,6 +1712,7 @@ export default function ShuffleScreen() {
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  paddingHorizontal: 20,
                 }}
               >
                 <View
@@ -1647,7 +1753,7 @@ export default function ShuffleScreen() {
               </View>
 
               {winnersExpanded && (
-                <View style={{ marginTop: 16 }}>
+                <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
                   <Text
                     style={{
                       fontSize: 14,
@@ -1688,7 +1794,7 @@ export default function ShuffleScreen() {
               style={[
                 styles.sourceCard,
                 {
-                  backgroundColor: theme.colors.surface,
+                  backgroundColor: "transparent",
                   borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
@@ -1698,6 +1804,7 @@ export default function ShuffleScreen() {
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  paddingHorizontal: 20,
                 }}
               >
                 {/* Left - Icon */}
@@ -1741,7 +1848,7 @@ export default function ShuffleScreen() {
               </View>
 
               {filtersExpanded && (
-                <View style={{ marginTop: 16 }}>
+                <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
                   <Text
                     style={{
                       fontSize: 14,
@@ -2074,7 +2181,7 @@ export default function ShuffleScreen() {
               style={[
                 styles.sourceCard,
                 {
-                  backgroundColor: theme.colors.surface,
+                  backgroundColor: "transparent",
                   borderBottomColor: theme.colors.outlineVariant,
                 },
               ]}
@@ -2084,6 +2191,7 @@ export default function ShuffleScreen() {
                   flexDirection: "row",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  paddingHorizontal: 20,
                 }}
               >
                 {/* Left - Icon */}
@@ -2127,7 +2235,7 @@ export default function ShuffleScreen() {
               </View>
 
               {surpriseExpanded && (
-                <View style={{ marginTop: 16 }}>
+                <View style={{ marginTop: 16, paddingHorizontal: 20 }}>
                   <Text
                     style={{
                       fontSize: 14,
@@ -2167,11 +2275,11 @@ export default function ShuffleScreen() {
 
       {/* ELIMINATION MODE */}
       {phase === "eliminate" && (
-        <View style={[styles.container, { flex: 0 }]}>
+        <View style={{ flex: 1 }}>
           {renderHeaderWithBack()}
 
           {noResults && restaurants.length === 0 ? (
-            <View style={{ marginTop: 24 }}>
+            <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
               <Text
                 style={{
                   textAlign: "center",
@@ -2183,7 +2291,7 @@ export default function ShuffleScreen() {
             </View>
           ) : null}
           {loading ? (
-            <View>
+            <View style={{ paddingHorizontal: 20 }}>
               {Array.from({ length: parseInt(numberDisplayed) || 10 }).map(
                 (_, index) => (
                   <HomeSkeleton key={index} />
@@ -2195,10 +2303,19 @@ export default function ShuffleScreen() {
               data={restaurants}
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ paddingBottom: 24 }}
+              ListHeaderComponent={renderListHeader}
               renderItem={({ item }) => {
                 const isFavorite = favoriteIds.has(item.id);
                 const imageUrl = getCardImage(item);
                 const animValue = getAnimatedValue(item.id);
+                const photos =
+                  Array.isArray(item.photos) && item.photos.length > 0
+                    ? item.photos
+                    : imageUrl
+                    ? [imageUrl]
+                    : [
+                        "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png",
+                      ];
 
                 return (
                   <Animated.View
@@ -2227,95 +2344,61 @@ export default function ShuffleScreen() {
                         {
                           backgroundColor: surface,
                           marginBottom: 16,
-                          borderRadius: 10,
-                          overflow: "hidden",
                         },
                       ]}
                     >
                       <View style={{ position: "relative" }}>
-                        {imageUrl ? (
-                          <Card.Cover
-                            source={{ uri: imageUrl }}
-                            style={{
-                              width: "100%",
-                              height: 240,
-                              borderRadius: 10,
-                            }}
-                          />
-                        ) : (
-                          <Card.Cover
-                            source={{
-                              uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png",
-                            }}
-                            style={{
-                              width: "100%",
-                              height: 240,
-                              borderRadius: 10,
-                            }}
-                          />
-                        )}
+                        <Image
+                          source={{ uri: photos[0] }}
+                          style={styles.cardImage}
+                          resizeMode="cover"
+                        />
+
                         <LinearGradient
                           colors={["transparent", "rgba(0,0,0,0.6)"]}
                           style={StyleSheet.absoluteFillObject}
                         />
 
+                        {/* QuickActionsMenu overlay */}
                         <View
                           style={{
                             position: "absolute",
-                            top: 0,
-                            right: 0,
-                            width: 50,
-                            height: 50,
-                            backgroundColor: theme.colors.secondary + "DD",
-                            borderBottomLeftRadius: 20,
-                            justifyContent: "center",
-                            alignItems: "center",
-                            elevation: 4,
-                            shadowColor: "#000",
-                            shadowOpacity: 0.3,
-                            shadowRadius: 4,
-                            shadowOffset: { width: 0, height: 2 },
+                            top: 12,
+                            right: 12,
+                            zIndex: 20,
                           }}
+                          pointerEvents="box-none"
                         >
                           <QuickActionsMenu
                             restaurant={item}
                             isFavorite={isFavorite}
                             onFavoriteChange={refreshFavoriteIds}
                             onCreateNewList={() => {}}
-                            preloadedLists={[]}
-                            listsReady={false}
+                            preloadedLists={listsCache}
+                            listsReady={listsLoaded}
                           />
                         </View>
                       </View>
 
-                      <View style={{ padding: 16 }}>
+                      <View style={styles.cardContent}>
                         <Text
-                          style={{
-                            fontSize: 22,
-                            fontWeight: "700",
-                            marginBottom: 4,
-                            color: theme.colors.onSurface,
-                          }}
+                          style={[
+                            styles.cardTitle,
+                            { color: theme.colors.onSurface },
+                          ]}
+                          numberOfLines={1}
                         >
                           {item.name}
                         </Text>
 
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            flexWrap: "wrap",
-                            marginBottom: 4,
-                          }}
-                        >
+                        <View style={styles.metaRow}>
                           {item.rating != null &&
                             typeof item.rating === "number" && (
                               <Text
-                                style={{
-                                  fontSize: 14,
-                                  marginRight: 6,
-                                  color: theme.colors.onSurface,
-                                }}
+                                style={[
+                                  styles.metaText,
+                                  { color: theme.colors.onSurface },
+                                ]}
                               >
                                 {`⭐ ${item.rating.toFixed(1)}`}
                               </Text>
@@ -2323,11 +2406,10 @@ export default function ShuffleScreen() {
 
                           {item.reviewCount != null && (
                             <Text
-                              style={{
-                                fontSize: 14,
-                                marginRight: 6,
-                                color: theme.colors.onSurface + "99",
-                              }}
+                              style={[
+                                styles.metaText,
+                                { color: theme.colors.onSurface + "99" },
+                              ]}
                             >
                               {`(${item.reviewCount} reviews)`}
                             </Text>
@@ -2335,11 +2417,10 @@ export default function ShuffleScreen() {
 
                           {item.price != null && (
                             <Text
-                              style={{
-                                fontSize: 14,
-                                marginRight: 6,
-                                color: theme.colors.onSurface + "99",
-                              }}
+                              style={[
+                                styles.metaText,
+                                { color: theme.colors.onSurface + "99" },
+                              ]}
                             >
                               {`• ${item.price}`}
                             </Text>
@@ -2348,13 +2429,7 @@ export default function ShuffleScreen() {
 
                         {(item.isOpen !== null ||
                           (item.hours && item.hours.length > 0)) && (
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              marginVertical: 8,
-                            }}
-                          >
+                          <View style={styles.hoursRow}>
                             {item.isOpen !== null &&
                               item.isOpen !== undefined && (
                                 <Text
@@ -2395,11 +2470,10 @@ export default function ShuffleScreen() {
 
                         {item.address && (
                           <Text
-                            style={{
-                              fontSize: 13,
-                              marginBottom: 3,
-                              color: theme.colors.onSurface + "99",
-                            }}
+                            style={[
+                              styles.detail,
+                              { color: theme.colors.onSurface + "99" },
+                            ]}
                           >
                             {formatAddress(item.address)}
                           </Text>
@@ -2407,50 +2481,24 @@ export default function ShuffleScreen() {
 
                         {item.distanceMiles != null && (
                           <Text
-                            style={{
-                              fontSize: 13,
-                              marginBottom: 3,
-                              color: theme.colors.onSurface + "99",
-                            }}
+                            style={[
+                              styles.detail,
+                              { color: theme.colors.onSurface + "99" },
+                            ]}
                           >
                             {`${item.distanceMiles.toFixed(2)} mi away`}
                           </Text>
                         )}
 
-                        {!winner && (
-                          <Button
-                            mode="contained"
-                            onPress={() => handleEliminate(item.id)}
-                            buttonColor={theme.colors.error}
-                            textColor="#fff"
-                            style={{
-                              marginTop: 12,
-                              marginBottom: 8,
-                              borderRadius: 25,
-                            }}
-                            icon="close-circle-outline"
-                          >
-                            Eliminate
-                          </Button>
-                        )}
-
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            marginTop: 4,
-                            gap: 8,
-                          }}
-                        >
+                        <View style={styles.linkRow}>
                           <Button
                             mode="outlined"
                             icon="google-maps"
                             textColor={theme.colors.primary}
-                            style={{
-                              flex: 1,
-                              borderRadius: 25,
-                              borderColor: theme.colors.primary,
-                            }}
+                            style={[
+                              styles.linkButton,
+                              { borderColor: theme.colors.primary },
+                            ]}
                             onPress={() => {
                               const googleMapsUrl =
                                 item.googleMapsUrl ||
@@ -2467,11 +2515,10 @@ export default function ShuffleScreen() {
                             mode="outlined"
                             icon={Platform.OS === "ios" ? "map" : "map-marker"}
                             textColor={theme.colors.tertiary}
-                            style={{
-                              flex: 1,
-                              borderRadius: 25,
-                              borderColor: theme.colors.tertiary,
-                            }}
+                            style={[
+                              styles.linkButton,
+                              { borderColor: theme.colors.tertiary },
+                            ]}
                             onPress={() => {
                               const url = `http://maps.apple.com/?daddr=${encodeURIComponent(
                                 item.address || item.name
@@ -2482,6 +2529,22 @@ export default function ShuffleScreen() {
                             Apple
                           </Button>
                         </View>
+
+                        {!winner && (
+                          <Button
+                            mode="contained"
+                            onPress={() => handleEliminate(item.id)}
+                            buttonColor={theme.colors.error}
+                            textColor="#fff"
+                            style={{
+                              marginTop: 12,
+                              borderRadius: 25,
+                            }}
+                            icon="close-circle-outline"
+                          >
+                            Eliminate
+                          </Button>
+                        )}
                       </View>
                     </Card>
                   </Animated.View>
@@ -2853,7 +2916,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 20 },
   shuffleCounterContainer: {
     marginVertical: 8,
-    paddingHorizontal: 4,
+    paddingHorizontal: 20,
   },
   shuffleCounterText: {
     fontSize: 13,
@@ -2863,10 +2926,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+    paddingHorizontal: 20,
   },
   headerTitleRow: {
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 20,
   },
   header: { fontSize: 20, fontWeight: "700" },
   colorBar: { width: 5, height: 20, borderRadius: 4, marginRight: 6 },
@@ -2877,17 +2942,48 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   card: {
-    marginBottom: 22,
-    borderRadius: 20,
+    borderRadius: 0,
     overflow: "hidden",
     elevation: 3,
+    marginHorizontal: 0,
   },
+  cardImage: {
+    width: "100%",
+    height: CARD_PHOTO_HEIGHT,
+  },
+  cardContent: {
+    padding: 16,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginBottom: 4,
+  },
+  hoursRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 8,
+  },
+  metaText: { fontSize: 14, marginRight: 6 },
+  detail: { fontSize: 13, marginBottom: 3 },
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+    gap: 8,
+  },
+  linkButton: { flex: 1, borderRadius: 25 },
   sourceCard: {
     borderRadius: 0,
     borderWidth: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingVertical: 18,
-    paddingHorizontal: 20,
     marginBottom: 0,
     elevation: 0,
   },
@@ -2896,7 +2992,6 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     paddingVertical: 6,
   },
-  linkButton: { flex: 1, borderRadius: 25 },
 });
 
 export const dyn = {

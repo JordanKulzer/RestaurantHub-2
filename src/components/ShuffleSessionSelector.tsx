@@ -18,7 +18,7 @@ export default function ShuffleSessionSelector({
   return (
     <View style={styles.container}>
       <Text style={[styles.title, { color: theme.colors.onSurface }]}>
-        Shuffle with a friend
+        Play with a friend
       </Text>
 
       <View style={styles.buttonContainer}>
@@ -35,7 +35,7 @@ export default function ShuffleSessionSelector({
         >
           <MaterialCommunityIcons
             name="account-multiple-plus"
-            size={36}
+            size={27}
             color={theme.colors.tertiary}
           />
           <Text
@@ -61,7 +61,7 @@ export default function ShuffleSessionSelector({
         >
           <MaterialCommunityIcons
             name="login"
-            size={36}
+            size={27}
             color={theme.colors.tertiary}
           />
           <Text
@@ -76,7 +76,7 @@ export default function ShuffleSessionSelector({
       </View>
 
       <Text style={[styles.orText, { color: theme.colors.onSurfaceVariant }]}>
-        or begin shuffling below!
+        or begin playing below!
       </Text>
     </View>
   );
@@ -102,6 +102,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 12,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,

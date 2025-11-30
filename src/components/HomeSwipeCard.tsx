@@ -69,18 +69,12 @@ export default function HomeSwipeCard({
       : [defaultPhoto]
   );
   const [hoursVisible, setHoursVisible] = useState(false);
-  const [hintVisible, setHintVisible] = useState(true);
   const hours = restaurant.hours ?? [];
   const isOpen = restaurant.isOpen ?? null;
 
   const likeScale = useRef(new Animated.Value(1)).current;
   const dislikeScale = useRef(new Animated.Value(1)).current;
   const undoScale = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const timer = setTimeout(() => setHintVisible(false), 3000);
-    return () => clearTimeout(timer);
-  }, []);
 
   const formatAddress = (address: string | null | undefined): string => {
     if (!address) return "";
@@ -114,21 +108,18 @@ export default function HomeSwipeCard({
   };
 
   const handlePhotoTap = (event: any) => {
-    setHintVisible(false);
     if (photos.length <= 1) return;
 
     const { locationX } = event.nativeEvent;
     const tapZone = SCREEN_WIDTH / 2;
 
     if (locationX < tapZone) {
-      // Left half - go to previous photo
       if (activeIndex > 0) {
         setLeftTapFeedback(true);
         setTimeout(() => setLeftTapFeedback(false), 200);
         setActiveIndex(activeIndex - 1);
       }
     } else {
-      // Right half - go to next photo
       if (activeIndex < photos.length - 1) {
         setRightTapFeedback(true);
         setTimeout(() => setRightTapFeedback(false), 200);
@@ -148,7 +139,6 @@ export default function HomeSwipeCard({
         activeOpacity={0.9}
         onPress={handlePhotoTap}
         onLongPress={() => {
-          setHintVisible(false);
           setViewerVisible(true);
         }}
       >
@@ -213,17 +203,6 @@ export default function HomeSwipeCard({
             listsReady={listsReady}
           />
         </View>
-
-        {hintVisible && photos.length > 1 && (
-          <View
-            style={[
-              styles.hintBadge,
-              { backgroundColor: theme.colors.secondary + "CC" },
-            ]}
-          >
-            <Text style={styles.hintText}>Tap left/right for more photos</Text>
-          </View>
-        )}
       </TouchableOpacity>
 
       <View style={styles.infoSection}>
@@ -516,15 +495,6 @@ const styles = StyleSheet.create({
   },
   actionBtn: { elevation: 6 },
   actionBtnSmall: { elevation: 5 },
-  hintBadge: {
-    position: "absolute",
-    bottom: 10,
-    left: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  hintText: { color: "#fff", fontSize: 13, fontWeight: "500" },
   hoursModal: {
     marginHorizontal: 24,
     borderRadius: 16,

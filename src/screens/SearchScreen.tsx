@@ -11,6 +11,7 @@ import {
   Keyboard,
   Linking,
   TouchableOpacity,
+  Image,
 } from "react-native";
 import {
   Appbar,
@@ -32,6 +33,8 @@ import QuickActionsMenu from "../components/QuickActionsMenu";
 import { CreateListModal } from "../components";
 import { getLists } from "../utils/listsApi";
 import { getFavorites } from "../utils/favoritesApis";
+
+const CARD_PHOTO_HEIGHT = 280;
 
 export default function SearchScreen({ navigation }: any) {
   const theme = useTheme();
@@ -234,17 +237,6 @@ export default function SearchScreen({ navigation }: any) {
             },
           ]}
         >
-          {/* <Text
-            style={{
-              fontSize: 22,
-              fontWeight: "700",
-              color: theme.colors.tertiary,
-              marginLeft: 16,
-              marginRight: 12,
-            }}
-          >
-            Search
-          </Text> */}
           <View style={styles.searchbarContainer}>
             <Searchbar
               placeholder="Search restaurants"
@@ -364,7 +356,7 @@ export default function SearchScreen({ navigation }: any) {
           )}
 
           {loading && (
-            <View style={{ padding: 16 }}>
+            <View style={{ paddingHorizontal: 0 }}>
               <HomeSkeleton />
             </View>
           )}
@@ -377,224 +369,216 @@ export default function SearchScreen({ navigation }: any) {
                 scrollEnabled={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={styles.scrollArea}
-                renderItem={({ item }) => (
-                  <Card
-                    mode="elevated"
-                    style={[
-                      styles.card,
-                      { backgroundColor: theme.colors.surface },
-                    ]}
-                  >
-                    {/* Image with gradient overlay */}
-                    <View style={{ position: "relative" }}>
-                      {item.photo ? (
-                        <Card.Cover
-                          source={{ uri: item.photo }}
+                renderItem={({ item }) => {
+                  const photos = item.photo
+                    ? [item.photo]
+                    : [
+                        "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png",
+                      ];
+
+                  return (
+                    <Card
+                      mode="elevated"
+                      style={[
+                        styles.card,
+                        { backgroundColor: theme.colors.surface },
+                      ]}
+                    >
+                      {/* Image with gradient overlay and QuickActionsMenu */}
+                      <View style={{ position: "relative" }}>
+                        <Image
+                          source={{ uri: photos[0] }}
                           style={styles.cardImage}
+                          resizeMode="cover"
                         />
-                      ) : (
-                        <Card.Cover
-                          source={{
-                            uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png",
+
+                        <LinearGradient
+                          colors={["transparent", "rgba(0,0,0,0.6)"]}
+                          style={StyleSheet.absoluteFillObject}
+                        />
+
+                        {/* QuickActionsMenu overlay on top-right */}
+                        <View
+                          style={{
+                            position: "absolute",
+                            top: 12,
+                            right: 12,
+                            zIndex: 20,
                           }}
-                          style={styles.cardImage}
-                        />
-                      )}
-                      <LinearGradient
-                        colors={["transparent", "rgba(0,0,0,0.6)"]}
-                        style={StyleSheet.absoluteFillObject}
-                      />
-
-                      {/* ✅ QuickActionsMenu in top right with colored background */}
-                      <View
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          right: 0,
-                          width: 50,
-                          height: 50,
-                          backgroundColor: theme.colors.secondary + "DD",
-                          borderBottomLeftRadius: 20,
-                          justifyContent: "center",
-                          alignItems: "center",
-                          elevation: 4,
-                          shadowColor: "#000",
-                          shadowOpacity: 0.3,
-                          shadowRadius: 4,
-                          shadowOffset: { width: 0, height: 2 },
-                        }}
-                      >
-                        <QuickActionsMenu
-                          restaurant={item}
-                          isFavorite={favoriteIds.has(item.id)}
-                          onFavoriteChange={refreshFavorites}
-                          onCreateNewList={handleOpenCreateList}
-                          preloadedLists={listsCache}
-                          listsReady={listsLoaded}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Info Section */}
-                    <View style={styles.cardInfo}>
-                      <Text
-                        style={[
-                          styles.cardName,
-                          { color: theme.colors.onSurface },
-                        ]}
-                      >
-                        {item.name}
-                      </Text>
-
-                      {/* Meta Row - Rating, Reviews, Price */}
-                      <View style={styles.cardMetaRow}>
-                        {item.rating != null && (
-                          <Text
-                            style={[
-                              styles.cardMetaText,
-                              { color: theme.colors.onSurface },
-                            ]}
-                          >
-                            {`⭐ ${
-                              typeof item.rating === "number"
-                                ? item.rating.toFixed(1)
-                                : item.rating
-                            }`}
-                          </Text>
-                        )}
-
-                        {item.reviewCount != null && (
-                          <Text
-                            style={[
-                              styles.cardMetaText,
-                              { color: theme.colors.onSurface + "99" },
-                            ]}
-                          >
-                            {`(${item.reviewCount} reviews)`}
-                          </Text>
-                        )}
-
-                        {item.price != null && (
-                          <Text
-                            style={[
-                              styles.cardMetaText,
-                              { color: theme.colors.onSurface + "99" },
-                            ]}
-                          >
-                            {`• ${item.price}`}
-                          </Text>
-                        )}
+                          pointerEvents="box-none"
+                        >
+                          <QuickActionsMenu
+                            restaurant={item}
+                            isFavorite={favoriteIds.has(item.id)}
+                            onFavoriteChange={refreshFavorites}
+                            onCreateNewList={handleOpenCreateList}
+                            preloadedLists={listsCache}
+                            listsReady={listsLoaded}
+                          />
+                        </View>
                       </View>
 
-                      {/* Hours Row */}
-                      {(item.isOpen !== null || item.hours) && (
-                        <View style={styles.hoursRow}>
-                          {item.isOpen !== null &&
-                            item.isOpen !== undefined && (
-                              <Text
-                                style={[
-                                  styles.cardMetaText,
-                                  {
-                                    color: item.isOpen
-                                      ? theme.colors.primary
-                                      : theme.colors.secondary,
-                                    fontWeight: "600",
-                                  },
-                                ]}
-                              >
-                                {item.isOpen ? "Open now" : "Closed"}
-                              </Text>
-                            )}
+                      {/* Info Section */}
+                      <View style={styles.cardInfo}>
+                        <Text
+                          style={[
+                            styles.cardName,
+                            { color: theme.colors.onSurface },
+                          ]}
+                        >
+                          {item.name}
+                        </Text>
 
-                          {item.hours && item.hours.length > 0 && (
-                            <TouchableOpacity
-                              onPress={() => {
-                                console.log("Show hours modal for:", item.id);
-                              }}
+                        {/* Meta Row - Rating, Reviews, Price */}
+                        <View style={styles.cardMetaRow}>
+                          {item.rating != null && (
+                            <Text
+                              style={[
+                                styles.cardMetaText,
+                                { color: theme.colors.onSurface },
+                              ]}
                             >
-                              <Text
-                                style={{
-                                  marginLeft: 8,
-                                  color: theme.colors.primary,
-                                  fontWeight: "600",
-                                  textDecorationLine: "underline",
-                                  fontSize: 14,
-                                }}
-                              >
-                                View Hours
-                              </Text>
-                            </TouchableOpacity>
+                              {`⭐ ${
+                                typeof item.rating === "number"
+                                  ? item.rating.toFixed(1)
+                                  : item.rating
+                              }`}
+                            </Text>
+                          )}
+
+                          {item.reviewCount != null && (
+                            <Text
+                              style={[
+                                styles.cardMetaText,
+                                { color: theme.colors.onSurface + "99" },
+                              ]}
+                            >
+                              {`(${item.reviewCount} reviews)`}
+                            </Text>
+                          )}
+
+                          {item.price != null && (
+                            <Text
+                              style={[
+                                styles.cardMetaText,
+                                { color: theme.colors.onSurface + "99" },
+                              ]}
+                            >
+                              {`• ${item.price}`}
+                            </Text>
                           )}
                         </View>
-                      )}
 
-                      {/* Address */}
-                      {item.address && (
-                        <Text
-                          style={[
-                            styles.cardDetail,
-                            { color: theme.colors.onSurface + "99" },
-                          ]}
-                        >
-                          {formatAddress(item.address)}
-                        </Text>
-                      )}
+                        {/* Hours Row */}
+                        {(item.isOpen !== null || item.hours) && (
+                          <View style={styles.hoursRow}>
+                            {item.isOpen !== null &&
+                              item.isOpen !== undefined && (
+                                <Text
+                                  style={[
+                                    styles.cardMetaText,
+                                    {
+                                      color: item.isOpen
+                                        ? theme.colors.primary
+                                        : theme.colors.secondary,
+                                      fontWeight: "600",
+                                    },
+                                  ]}
+                                >
+                                  {item.isOpen ? "Open now" : "Closed"}
+                                </Text>
+                              )}
 
-                      {/* Distance */}
-                      {item.distanceMiles != null && (
-                        <Text
-                          style={[
-                            styles.cardDetail,
-                            { color: theme.colors.onSurface + "99" },
-                          ]}
-                        >
-                          {`${item.distanceMiles.toFixed(2)} mi away`}
-                        </Text>
-                      )}
+                            {item.hours && item.hours.length > 0 && (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  console.log("Show hours modal for:", item.id);
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    marginLeft: 8,
+                                    color: theme.colors.primary,
+                                    fontWeight: "600",
+                                    textDecorationLine: "underline",
+                                    fontSize: 14,
+                                  }}
+                                >
+                                  View Hours
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
 
-                      {/* Google and Apple Maps Buttons */}
-                      <View style={styles.linkRow}>
-                        <Button
-                          mode="outlined"
-                          icon="google-maps"
-                          textColor={theme.colors.primary}
-                          style={[
-                            styles.linkButton,
-                            { borderColor: theme.colors.primary },
-                          ]}
-                          onPress={() => {
-                            const googleMapsUrl =
-                              item.googleMapsUrl ||
-                              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                        {/* Address */}
+                        {item.address && (
+                          <Text
+                            style={[
+                              styles.cardDetail,
+                              { color: theme.colors.onSurface + "99" },
+                            ]}
+                          >
+                            {formatAddress(item.address)}
+                          </Text>
+                        )}
+
+                        {/* Distance */}
+                        {item.distanceMiles != null && (
+                          <Text
+                            style={[
+                              styles.cardDetail,
+                              { color: theme.colors.onSurface + "99" },
+                            ]}
+                          >
+                            {`${item.distanceMiles.toFixed(2)} mi away`}
+                          </Text>
+                        )}
+
+                        {/* Google and Apple Maps Buttons */}
+                        <View style={styles.linkRow}>
+                          <Button
+                            mode="outlined"
+                            icon="google-maps"
+                            textColor={theme.colors.primary}
+                            style={[
+                              styles.linkButton,
+                              { borderColor: theme.colors.primary },
+                            ]}
+                            onPress={() => {
+                              const googleMapsUrl =
+                                item.googleMapsUrl ||
+                                `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                  item.address || item.name
+                                )}`;
+                              Linking.openURL(googleMapsUrl);
+                            }}
+                          >
+                            Google
+                          </Button>
+
+                          <Button
+                            mode="outlined"
+                            icon={Platform.OS === "ios" ? "map" : "map-marker"}
+                            textColor={theme.colors.tertiary}
+                            style={[
+                              styles.linkButton,
+                              { borderColor: theme.colors.tertiary },
+                            ]}
+                            onPress={() => {
+                              const url = `http://maps.apple.com/?daddr=${encodeURIComponent(
                                 item.address || item.name
                               )}`;
-                            Linking.openURL(googleMapsUrl);
-                          }}
-                        >
-                          Google
-                        </Button>
-
-                        <Button
-                          mode="outlined"
-                          icon={Platform.OS === "ios" ? "map" : "map-marker"}
-                          textColor={theme.colors.tertiary}
-                          style={[
-                            styles.linkButton,
-                            { borderColor: theme.colors.tertiary },
-                          ]}
-                          onPress={() => {
-                            const url = `http://maps.apple.com/?daddr=${encodeURIComponent(
-                              item.address || item.name
-                            )}`;
-                            Linking.openURL(url);
-                          }}
-                        >
-                          Apple
-                        </Button>
+                              Linking.openURL(url);
+                            }}
+                          >
+                            Apple
+                          </Button>
+                        </View>
                       </View>
-                    </View>
-                  </Card>
-                )}
+                    </Card>
+                  );
+                }}
               />
             </Animated.View>
           )}
@@ -639,19 +623,17 @@ const styles = StyleSheet.create({
   },
   scrollArea: {
     flexGrow: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingTop: 12,
     paddingBottom: 20,
   },
   card: {
-    marginBottom: 16,
-    borderRadius: 10,
-    overflow: "hidden",
+    borderRadius: 0,
+    marginHorizontal: 0,
   },
   cardImage: {
     width: "100%",
-    height: 240,
-    borderRadius: 10,
+    height: CARD_PHOTO_HEIGHT,
   },
   cardInfo: {
     padding: 16,
@@ -710,12 +692,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 250,
   },
-  // chip: {
-  //   borderRadius: 18,
-  //   borderWidth: StyleSheet.hairlineWidth,
-  //   height: 34,
-  //   justifyContent: "center",
-  //   paddingHorizontal: 10,
-  //   marginBottom: 8,
-  // },
 });

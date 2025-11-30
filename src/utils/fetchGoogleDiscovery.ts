@@ -58,7 +58,7 @@ function mapGoogleResult(r: any, lat: number, lon: number): HomeRestaurant {
     photos: photo ? [photo] : [],
     image: photo,
     googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${r.place_id}`,
-    price: null,
+    price: r.price_level ? "$".repeat(r.price_level) : null,
     categories: r.types ?? null,
     isOpen: r.opening_hours?.open_now ?? null,
     hours: [],
@@ -66,7 +66,7 @@ function mapGoogleResult(r: any, lat: number, lon: number): HomeRestaurant {
 }
 
 // ----------------------------------------------
-// Discovery (optimized version with radius)
+// Discovery (with pagination for more variety!)
 // ----------------------------------------------
 
 export async function fetchGoogleDiscovery({
@@ -84,12 +84,12 @@ export async function fetchGoogleDiscovery({
     ? `&keyword=${encodeURIComponent(filters.join(" "))}`
     : "";
 
-  // Use user's distance filter or default to 5 miles
+  // Use user's distance filter or default to 10 miles
   const miles =
     maxDistanceMiles && maxDistanceMiles > 0 ? maxDistanceMiles : 10;
-  const radiusMeters = Math.round(miles * 1609.34); // Convert miles to meters
+  const radiusMeters = Math.round(miles * 1609.34);
 
-  const url =
+  const baseUrl =
     `${GOOGLE_PLACES_BASE}/nearbysearch/json` +
     `?location=${latitude},${longitude}` +
     `&radius=${radiusMeters}` +
@@ -97,11 +97,38 @@ export async function fetchGoogleDiscovery({
     `${categoryString}` +
     `&key=${API_KEY}`;
 
-  const data = await fetchJson(url);
-  const rawResults = data.results ?? [];
+  let allResults: any[] = [];
+  let nextPageToken: string | null = null;
+  let pageCount = 0;
+  const MAX_PAGES = 3; // Fetch up to 3 pages (60 results total)
 
-  // Calculate distances for all results
-  const filtered = rawResults.filter((r: any) => {
+  // Fetch multiple pages to get more variety
+  do {
+    const url = nextPageToken
+      ? `${GOOGLE_PLACES_BASE}/nearbysearch/json?pagetoken=${nextPageToken}&key=${API_KEY}`
+      : baseUrl;
+
+    const data = await fetchJson(url);
+
+    if (data.results && data.results.length > 0) {
+      allResults = allResults.concat(data.results);
+    }
+
+    nextPageToken = data.next_page_token || null;
+    pageCount++;
+
+    // Google requires a short delay before fetching next page
+    if (nextPageToken && pageCount < MAX_PAGES) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  } while (nextPageToken && pageCount < MAX_PAGES);
+
+  console.log(
+    `📍 Fetched ${allResults.length} restaurants from ${pageCount} page(s)`
+  );
+
+  // Filter out results without location
+  const filtered = allResults.filter((r: any) => {
     const plats = r.geometry?.location?.lat;
     const plng = r.geometry?.location?.lng;
     return plats && plng;
@@ -120,8 +147,10 @@ export async function fetchGoogleDiscovery({
   // Map to HomeRestaurant
   let mapped = unique.map((r) => mapGoogleResult(r, latitude, longitude));
 
-  // Random shuffle - now with a much larger pool!
+  // Random shuffle the ENTIRE pool before showing
   mapped = mapped.sort(() => Math.random() - 0.5);
+
+  console.log(`✅ Returning ${mapped.length} unique restaurants after shuffle`);
 
   return mapped;
 }
