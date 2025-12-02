@@ -1390,7 +1390,6 @@ export default function ShuffleScreen() {
                   paddingHorizontal: 20,
                 }}
               >
-                {/* Left - Icon */}
                 <View
                   style={{
                     flexDirection: "row",

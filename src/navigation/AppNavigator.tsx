@@ -72,7 +72,7 @@ function TabNavigator() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Shuffle" component={ShuffleScreen} />
-      <Tab.Screen name="Search" component={SearchScreen} />
+      {/* <Tab.Screen name="Search" component={SearchScreen} /> */}
       <Tab.Screen name="Account" component={AccountNavigator} />
     </Tab.Navigator>
   );
