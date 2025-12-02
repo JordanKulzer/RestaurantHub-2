@@ -935,6 +935,7 @@ export default function HomeScreen() {
             </Animated.View>
           )}
         </View>
+        <View>HIIIIIIIIIIIIII</View>
 
         {renderModal("category")}
         {renderModal("rating")}
