@@ -926,7 +926,7 @@ export default function HomeScreen() {
                 backgroundColor="transparent"
                 stackSize={2}
                 verticalSwipe={false}
-                animateCardOpacity
+                // animateCardOpacity
                 cardVerticalMargin={0}
                 cardHorizontalMargin={0}
                 containerStyle={{ flex: 1 }}
@@ -935,7 +935,6 @@ export default function HomeScreen() {
             </Animated.View>
           )}
         </View>
-        <View>HIIIIIIIIIIIIII</View>
 
         {renderModal("category")}
         {renderModal("rating")}
